@@ -112,7 +112,7 @@
     "postcss": "^8.5.29",
     "postcss-import": "^17.0.0",
     "prettier": "^3.6.2",
-    "puppeteer-core": "^25.14.0",
+    "puppeteer-core": "^25.15.0",
     "react-error-boundary": "^5.0.0",
     "react-hook-form": "^7.89.0",
     "react-markdown": "^10.1.0",
