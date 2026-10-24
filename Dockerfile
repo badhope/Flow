@@ -1,20 +1,20 @@
 # syntax=docker/dockerfile:1
 
 # ---------- deps：安装完整依赖（含构建工具链） ----------
-FROM node:22-slim AS deps
+FROM node:25-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 # ---------- build：编译服务端（tsc）与前端（vite） ----------
-FROM node:22-slim AS build
+FROM node:25-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build:server && npm run build:client
 
 # ---------- runtime：仅生产依赖 + 构建产物 ----------
-FROM node:22-slim AS runtime
+FROM node:25-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
