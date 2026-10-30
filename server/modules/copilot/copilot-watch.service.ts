@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Logger, BadRequestException, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotNotifyService } from './copilot-notify.service';
+import { isSafePublicHttpUrl } from '../../common/http/url-guard';
 import type { SmtpConfig } from './copilot-notify-transport';
 import { diffNewInsights } from './copilot-insight-digest';
 import { formatForChannel, renderDigest } from './copilot-digest-format';
@@ -108,6 +109,9 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     const actorId = actor.userId ?? '';
     const settingsKey = watchSettingsKeyFor(actor);
     const current = await this.getSettings(actor);
+    if (input.notifyUrl !== undefined && input.notifyUrl.trim() && !isSafePublicHttpUrl(input.notifyUrl.trim())) {
+      throw new BadRequestException('通知地址不可用：禁止指向内网/保留地址（SSRF 防护）');
+    }
     const next: WatchSettings = {
       enabled: input.enabled === undefined ? current.enabled : input.enabled === true,
       intervalMinutes: input.intervalMinutes === undefined

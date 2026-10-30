@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { isSafePublicHttpUrl } from '../../common/http/url-guard';
 
 export type NotifyKind = 'webhook' | 'email' | 'none';
 
@@ -55,6 +56,15 @@ export class NotifyTransport {
     }
     if (!/^https?:\/\//i.test(url)) {
       return { ok: false, channel: 'webhook', message: 'Webhook 地址必须以 http(s):// 开头', permanent: true };
+    }
+    if (!isSafePublicHttpUrl(url)) {
+      this.logger.warn(`Webhook 地址被拒绝（私网/保留地址）: ${url}`);
+      return {
+        ok: false,
+        channel: 'webhook',
+        message: 'Webhook 地址不可用：禁止指向内网/保留地址（SSRF 防护）',
+        permanent: true,
+      };
     }
 
     try {

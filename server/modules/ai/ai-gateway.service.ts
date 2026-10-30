@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { eq, and, gte, lte, count, sum } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
+import { isSafePublicHttpUrl } from '../../common/http/url-guard';
 import { aiSettings, aiUsageLog } from '../../database/schema';
 import {
   LLM_NOT_CONFIGURED_MESSAGE,
@@ -76,7 +77,14 @@ export class AiGatewayService {
       else if (bareKey === 'llm_api_key') dbConfig.apiKey = row.value;
       else if (bareKey === 'llm_model') dbConfig.model = row.value;
     }
-    return resolveLlmConfig(dbConfig, process.env);
+    const resolved = resolveLlmConfig(dbConfig, process.env);
+    // SSRF 防护（切片 4）：baseUrl 指向内网/保留地址时按未配置处理（诚实拒绝，不打内网）
+    if (resolved.apiKey && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))) {
+      throw new BadRequestException(
+        '模型 Base URL 不可用：禁止指向内网/保留地址（SSRF 防护）。请在「模型设置」中改为公网地址',
+      );
+    }
+    return resolved;
   }
 
   async isConfigured(forUser?: { userId?: string; role?: string }): Promise<boolean> {
