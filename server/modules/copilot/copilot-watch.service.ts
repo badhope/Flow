@@ -26,6 +26,11 @@ export interface WatchSettings {
 }
 
 export const WATCH_SETTINGS_KEY = 'copilot_watch_settings';
+/** 卖家作用域键：`{userId}:{key}`（admin 用全局键，与 ai-settings-scope 同规则） */
+export function watchSettingsKeyFor(actor: { userId?: string; role?: string }): string {
+  if (actor.role === 'admin' || !actor.userId) return WATCH_SETTINGS_KEY;
+  return `${actor.userId}:${WATCH_SETTINGS_KEY}`;
+}
 export const DEFAULT_WATCH_SETTINGS: WatchSettings = {
   enabled: false,
   intervalMinutes: 30,
@@ -70,11 +75,12 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     }
   }
 
-  async getSettings(): Promise<WatchSettings> {
+  async getSettings(actor: { userId?: string; role?: string } = {}): Promise<WatchSettings> {
+    const settingsKey = watchSettingsKeyFor(actor);
     const rows = await this.db
       .select({ value: aiSettings.value })
       .from(aiSettings)
-      .where(eq(aiSettings.key, WATCH_SETTINGS_KEY))
+      .where(eq(aiSettings.key, settingsKey))
       .limit(1);
     if (!rows[0]?.value) return { ...DEFAULT_WATCH_SETTINGS };
     try {
@@ -95,8 +101,13 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     }
   }
 
-  async updateSettings(input: Partial<WatchSettings>, actorId: string): Promise<WatchSettings> {
-    const current = await this.getSettings();
+  async updateSettings(
+    input: Partial<WatchSettings>,
+    actor: { userId?: string; role?: string },
+  ): Promise<WatchSettings> {
+    const actorId = actor.userId ?? '';
+    const settingsKey = watchSettingsKeyFor(actor);
+    const current = await this.getSettings(actor);
     const next: WatchSettings = {
       enabled: input.enabled === undefined ? current.enabled : input.enabled === true,
       intervalMinutes: input.intervalMinutes === undefined
@@ -112,7 +123,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     };
     await this.db
       .insert(aiSettings)
-      .values({ key: WATCH_SETTINGS_KEY, value: JSON.stringify(next), updatedBy: actorId })
+      .values({ key: settingsKey, value: JSON.stringify(next), updatedBy: actorId })
       .onConflictDoUpdate({
         target: aiSettings.key,
         set: { value: JSON.stringify(next), updatedBy: actorId, updatedAt: new Date() },
@@ -121,9 +132,9 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     return next;
   }
 
-  /** 按当前配置重建定时器（配置变化后调用） */
+  /** 按当前配置重建定时器（配置变化后调用）。admin 全局设置驱动调度；seller 设置仅存取 */
   async reschedule(): Promise<void> {
-    const settings = await this.getSettings();
+    const settings = await this.getSettings({ role: 'admin' });
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -148,7 +159,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     if (this.running) return { ran: false, message: '上一次巡检仍在执行' };
     this.running = true;
     try {
-      if (!force && !(await this.getSettings()).enabled) {
+      if (!force && !(await this.getSettings({ role: 'admin' })).enabled) {
         return { ran: false, message: '定时巡检未开启' };
       }
 
@@ -164,7 +175,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
         await this.writeSnapshot(insights);
         this.logger.log(plainDigest.replace(/\n/g, ' | '));
 
-        const settings = await this.getSettings();
+        const settings = await this.getSettings({ role: 'admin' });
         const channelReady = settings.notifyKind === 'email'
           ? !!settings.notifySmtp?.host
           : settings.notifyKind === 'webhook' ? !!settings.notifyUrl : false;

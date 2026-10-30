@@ -56,8 +56,8 @@ export class AiController {
   }
 
   @Get('status')
-  async getStatus(): Promise<AIStatusResponse> {
-    const config = await this.aiGateway.resolveConfig();
+  async getStatus(@Req() req: Request): Promise<AIStatusResponse> {
+    const config = await this.aiGateway.resolveConfig(this.getActor(req));
     return {
       configured: config.apiKey.length > 0,
       model: config.apiKey.length > 0 ? config.model : undefined,

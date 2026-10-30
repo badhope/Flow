@@ -61,7 +61,7 @@ ${dataContext}
     );
 
     // 落库：报告可在「AI 分析中心 → 历史报告」回看（docs 承诺的真实实现）
-    const model = await this.aiGateway.getModel();
+    const model = await this.aiGateway.getModel({ userId: actor.userId });
     const inserted = await this.db
       .insert(aiReports)
       .values({

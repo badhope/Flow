@@ -198,8 +198,8 @@ export class CopilotController {
   }
 
   @Get('watch')
-  async getWatchSettings(): Promise<WatchSettings> {
-    return this.watchService.getSettings();
+  async getWatchSettings(@Req() req: Request): Promise<WatchSettings> {
+    return this.watchService.getSettings(this.getActor(req));
   }
 
   @Put('watch')
@@ -210,7 +210,7 @@ export class CopilotController {
     const actor = this.getActor(req);
     const updated = await this.watchService.updateSettings(
       dto as unknown as Partial<import('./copilot-watch.service').WatchSettings>,
-      actor.userId,
+      actor,
     );
     void this.auditService.log({
       action: 'copilot.watch_update',
@@ -276,7 +276,7 @@ export class CopilotController {
     @Query('format') format?: string,
   ): Promise<{ format: string; subject: string; body: string }> {
     const safeFormat = format === 'html' || format === 'markdown' ? format : 'plain';
-    const settings = await this.watchService.getSettings();
+    const settings = await this.watchService.getSettings(this.getActor(req));
     const { insights, generatedAt } = await this.insightsService.getInsights(this.getActor(req));
     const at = new Date(generatedAt);
     const subject = renderSubject(settings.notifySubjectTemplate, insights, []);

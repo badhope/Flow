@@ -39,8 +39,8 @@ export class AiSettingsController {
   }
 
   @Get('settings')
-  async getSettings(): Promise<AiSettingsView> {
-    return this.settingsService.get();
+  async getSettings(@Req() req: Request): Promise<AiSettingsView> {
+    return this.settingsService.get(this.getActor(req));
   }
 
   @Put('settings')
@@ -48,12 +48,12 @@ export class AiSettingsController {
     @Req() req: Request,
     @Body() dto: UpdateAiSettingsDto,
   ): Promise<AiSettingsView> {
-    return this.settingsService.update(dto, this.getActorId(req));
+    return this.settingsService.update(dto, this.getActor(req));
   }
 
   @Post('settings/test')
-  async testSettings(): Promise<AiSettingsTestResult> {
-    return this.settingsService.test();
+  async testSettings(@Req() req: Request): Promise<AiSettingsTestResult> {
+    return this.settingsService.test(this.getActor(req));
   }
 
   @Get('agents')
