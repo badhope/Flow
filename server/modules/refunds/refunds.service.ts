@@ -20,6 +20,13 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { resolveProviderRefundAmount } from '../payments/refund-amount';
+import { assertRefundWithinOrderCap } from './refund-cap';
+import {
+  computeRefundableQuantity,
+  computeItemRefundAmount,
+  parseRefundItemsJson,
+  sumRefundedQuantityByItem,
+} from './refund-items';
 import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 
 /** Parsed shape of the refunds.items JSON field */
@@ -51,12 +58,7 @@ export class RefundsService {
   }
 
   private parseRefundItems(raw: string | null): RefundItemEntry[] | undefined {
-    if (!raw) return undefined;
-    try {
-      return JSON.parse(raw) as RefundItemEntry[];
-    } catch {
-      return undefined;
-    }
+    return parseRefundItemsJson(raw);
   }
 
   private mapRefund(row: typeof refunds.$inferSelect) {
@@ -155,12 +157,7 @@ export class RefundsService {
         .select({ items: refunds.items })
         .from(refunds)
         .where(and(eq(refunds.orderId, orderId), eq(refunds.status, 'completed')));
-      const refundedByItem = new Map<string, number>();
-      for (const prev of previous) {
-        for (const entry of this.parseRefundItems(prev.items) ?? []) {
-          refundedByItem.set(entry.orderItemId, (refundedByItem.get(entry.orderItemId) ?? 0) + entry.quantity);
-        }
-      }
+      const refundedByItem = sumRefundedQuantityByItem(previous);
 
       refundAmount = new Decimal(0);
       for (const refundItem of dto.items) {
@@ -184,12 +181,15 @@ export class RefundsService {
         }
         const item = itemRows[0];
         const alreadyRefunded = refundedByItem.get(refundItem.orderItemId) ?? 0;
-        const refundable = item.quantity - alreadyRefunded;
+        const refundable = computeRefundableQuantity({
+          purchased: item.quantity,
+          alreadyRefunded,
+        });
         if (refundItem.quantity > refundable) {
           throw new BadRequestException(`退款数量超过可退数量（最多 ${refundable} 件）`);
         }
         refundAmount = refundAmount.plus(
-          new Decimal(item.unitPrice as string).mul(refundItem.quantity),
+          computeItemRefundAmount({ unitPrice: item.unitPrice as string, quantity: refundItem.quantity }),
         );
       }
     } else if (dto.amount) {
@@ -315,9 +315,14 @@ export class RefundsService {
       .from(refunds)
       .where(and(eq(refunds.orderId, order.id), eq(refunds.status, 'completed')));
     const completedTotal = new Decimal(completedRows[0]?.total ?? 0);
-    const remaining = orderTotal.minus(completedTotal);
-    if (refundAmount.gt(remaining)) {
-      throw new BadRequestException(`可退余额不足：剩余可退 $${remaining.toFixed(2)}`);
+    try {
+      assertRefundWithinOrderCap({
+        orderTotal: order.totalAmount as string,
+        completedRefunded: completedTotal.toFixed(2),
+        refundAmount: refundAmount.toFixed(2),
+      });
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : String(err));
     }
 
     // 找到本订单的已支付流水（用于渠道退款）
