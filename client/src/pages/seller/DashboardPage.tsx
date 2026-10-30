@@ -228,7 +228,7 @@ const DashboardPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-12 gap-4">
+      <div className="flow-dark flow-radial-glow -m-4 grid grid-cols-12 gap-4 p-4 lg:-m-6 lg:p-6">
         <div className="flow-skeleton col-span-12 h-[220px] rounded-2xl lg:col-span-8" />
         <div className="flow-skeleton col-span-12 h-[220px] rounded-2xl lg:col-span-4" />
         <div className="flow-skeleton col-span-12 h-[320px] rounded-2xl lg:col-span-8" />
@@ -251,7 +251,7 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="flow-dark flow-radial-glow -m-4 grid grid-cols-12 gap-4 p-4 lg:-m-6 lg:p-6">
       {/* AI 简报：占 8 列 */}
       <section className="col-span-12 overflow-hidden rounded-2xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] lg:col-span-8">
         <div className="flex items-center gap-2 border-b border-[var(--flow-line-1)] px-5 py-3">

@@ -29,10 +29,10 @@ export class CopilotInsightsService {
     return mergeInsightThresholds(rows[0]?.value);
   }
 
-  async getInsights(actor?: { sellerId?: string; role?: string }): Promise<CopilotInsightsView> {
+  async getInsights(actor?: { userId?: string; role?: string }): Promise<CopilotInsightsView> {
     const thresholds = await this.getThresholds();
-    // 卖家巡检只看本店（管理员不传 sellerId 时看全平台）
-    const sellerId = actor && actor.role !== 'admin' ? actor.sellerId : undefined;
+    // 卖家巡检只看本店（管理员不传 userId 时看全平台）
+    const sellerId = actor && actor.role !== 'admin' ? actor.userId : undefined;
     const [lowStock, staleRefunds, unpaidOrders, staleShipments] = await Promise.all([
       this.lowStock(thresholds, sellerId),
       this.staleRefunds(thresholds, sellerId),

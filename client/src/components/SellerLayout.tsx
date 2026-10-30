@@ -157,8 +157,8 @@ const SellerLayout: React.FC = () => {
   );
 
   return (
-    <div className="flow-dark flex h-screen w-full bg-[var(--flow-bg)]">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] lg:flex">
+    <div className="flex h-screen w-full bg-slate-100">
+      <aside className="flow-dark hidden w-60 shrink-0 flex-col border-r border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] lg:flex">
         <div className="flex items-center gap-2.5 border-b border-[var(--flow-line-1)] px-4 py-4">
           <Image src={logoWhite} alt="Flow" className="size-8 object-contain" />
           <div className="min-w-0">
@@ -250,7 +250,7 @@ const SellerLayout: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-[var(--flow-bg)] p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto bg-slate-100 p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

@@ -39,7 +39,7 @@ const AgentTrace: React.FC<AgentTraceProps> = ({
   const zh = language === 'zh';
   const [open, setOpen] = useState(defaultOpen);
 
-  if (steps.length < 2) return null;
+  if (steps.length === 0) return null;
 
   const done = steps.filter((s) => s.status === 'done').length;
   const failed = steps.some((s) => s.status === 'failed');
