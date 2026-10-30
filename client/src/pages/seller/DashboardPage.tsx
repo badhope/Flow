@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactEChartsCore from 'echarts-for-react/lib/core';
+import echarts from '../../lib/echarts';
 import {
   DollarSign,
   ShoppingCart,
@@ -300,10 +301,12 @@ const DashboardPage: React.FC = () => {
             <CardTitle className="text-base">近30天销售趋势</CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
-            <ReactECharts
+            <ReactEChartsCore
+              echarts={echarts}
               option={trendOption}
               style={{ height: 320 }}
               notMerge={true}
+              lazyUpdate={true}
             />
           </CardContent>
         </Card>
@@ -313,10 +316,12 @@ const DashboardPage: React.FC = () => {
             <CardTitle className="text-base">分类销售占比</CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
-            <ReactECharts
+            <ReactEChartsCore
+              echarts={echarts}
               option={pieOption}
               style={{ height: 320 }}
               notMerge={true}
+              lazyUpdate={true}
             />
           </CardContent>
         </Card>

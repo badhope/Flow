@@ -39,6 +39,10 @@ export default defineConfig({
           ) {
             return 'vendor-react';
           }
+          // ECharts 独立分包：只有卖家看板异步加载它，独立缓存避免发版失效
+          if (id.includes('/echarts') || id.includes('zrender') || id.includes('size-sensor')) {
+            return 'vendor-echarts';
+          }
           return undefined;
         },
       },
