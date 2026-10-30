@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq, and, desc, gte, sql, sum, count } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
+import { buildSellerScopeCondition, andOptional, type SellerActor } from './seller-scope';
 import { products, productVariants, categories, orders, orderItems, aiReports } from '../../database/schema';
 import type { AITrendReport } from '../../../shared/api.interface';
 
@@ -14,10 +15,11 @@ export class TrendService {
     private readonly aiGateway: AiGatewayService,
   ) {}
 
-  async generateTrendReport(userId: string): Promise<AITrendReport> {
-    const salesData = await this.getSalesData();
-    const categorySales = await this.getCategorySales();
-    const topProducts = await this.getTopProducts();
+  async generateTrendReport(actor: SellerActor): Promise<AITrendReport> {
+    const sellerId = actor.userId;
+    const salesData = await this.getSalesData(sellerId);
+    const categorySales = await this.getCategorySales(sellerId);
+    const topProducts = await this.getTopProducts(sellerId);
     const allCategories = await this.db.select({
       id: categories.id,
       nameZh: categories.nameZh,
@@ -55,7 +57,7 @@ ${dataContext}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId },
+      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId: actor.userId },
     );
 
     // 落库：报告可在「AI 分析中心 → 历史报告」回看（docs 承诺的真实实现）
@@ -63,7 +65,7 @@ ${dataContext}
     const inserted = await this.db
       .insert(aiReports)
       .values({
-        userId,
+        userId: actor.userId,
         reportType: 'trend',
         title: '市场趋势分析报告',
         content,
@@ -81,7 +83,7 @@ ${dataContext}
     };
   }
 
-  private async getSalesData(): Promise<Array<{ date: string; amount: number; orders: number }>> {
+  private async getSalesData(sellerId?: string): Promise<Array<{ date: string; amount: number; orders: number }>> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -93,9 +95,10 @@ ${dataContext}
         orders: count(orders.id).mapWith(Number),
       })
       .from(orders)
-      .where(and(
+      .where(andOptional(
         gte(orders.createdAt, thirtyDaysAgo),
         eq(orders.status, 'delivered'),
+        buildSellerScopeCondition(orders.sellerId, { userId: sellerId }),
       ))
       .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`);
@@ -107,7 +110,7 @@ ${dataContext}
     }));
   }
 
-  private async getCategorySales(): Promise<Array<{ categoryName: string; amount: number }>> {
+  private async getCategorySales(sellerId?: string): Promise<Array<{ categoryName: string; amount: number }>> {
     const rows = await this.db
       .select({
         categoryName: categories.nameEn,
@@ -117,7 +120,10 @@ ${dataContext}
       .innerJoin(products, eq(orderItems.productId, products.id))
       .innerJoin(categories, eq(products.categoryId, categories.id))
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .where(eq(orders.status, 'delivered'))
+      .where(andOptional(
+        eq(orders.status, 'delivered'),
+        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+      ))
       .groupBy(categories.nameEn)
       .orderBy(desc(sum(orderItems.subtotal)));
 
@@ -127,7 +133,7 @@ ${dataContext}
     }));
   }
 
-  private async getTopProducts(): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
+  private async getTopProducts(sellerId?: string): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
     // Aggregate from productVariants: SUM(variants.sold) per product, MIN(price) for display
     const rows = await this.db
       .select({
@@ -142,7 +148,10 @@ ${dataContext}
         eq(productVariants.productId, products.id),
         eq(productVariants.status, 'active'),
       ))
-      .where(eq(products.status, 'active'))
+      .where(andOptional(
+        eq(products.status, 'active'),
+        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+      ))
       .groupBy(products.id, products.titleEn)
       .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))
       .limit(10);

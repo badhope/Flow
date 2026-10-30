@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
 import { parseLlmJson } from './llm-json';
+import { buildSellerScopeCondition, andOptional, type SellerActor } from './seller-scope';
 import { products, productVariants, categories, shopperEvents } from '../../database/schema';
 import type { AISelectResponse } from '../../../shared/api.interface';
 
@@ -13,12 +14,27 @@ export class SelectService {
     private readonly aiGateway: AiGatewayService,
   ) {}
 
-  async selectProducts(userId?: string): Promise<AISelectResponse> {
+  async selectProducts(actor: SellerActor): Promise<AISelectResponse> {
+    const sellerId = actor.userId;
     const allCategories = await this.db.select({
       id: categories.id,
       nameZh: categories.nameZh,
       nameEn: categories.nameEn,
     }).from(categories);
+
+    // 本店在售商品 id（seller 范围内；admin 全平台）
+    const sellerProductIds = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(andOptional(
+        eq(products.status, 'active'),
+        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+      ));
+    const scopedIds = sellerProductIds.map((row) => row.id);
+
+    if (scopedIds.length === 0) {
+      return { items: [] };
+    }
 
     // Aggregate variant data per product for sold/price/stock
     const variantAgg = await this.db
@@ -29,7 +45,10 @@ export class SelectService {
         minPrice: sql<string>`MIN(${productVariants.price})::text`,
       })
       .from(productVariants)
-      .where(eq(productVariants.status, 'active'))
+      .where(and(
+        eq(productVariants.status, 'active'),
+        inArray(productVariants.productId, scopedIds),
+      ))
       .groupBy(productVariants.productId)
       .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))
       .limit(20);
@@ -40,7 +59,7 @@ export class SelectService {
       ? await this.db
         .select({ id: products.id, titleEn: products.titleEn, categoryId: products.categoryId })
         .from(products)
-        .where(eq(products.status, 'active'))
+        .where(and(eq(products.status, 'active'), inArray(products.id, productIds)))
       : [];
 
     const productMap = new Map(productRows.map((p) => [p.id, p]));
@@ -93,7 +112,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId },
+      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId: actor.userId },
     );
 
     const parsed = parseLlmJson<AISelectResponse>(content);

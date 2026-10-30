@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiAgents } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { buildOwnerVisibilityCondition, andOptional, type SellerActor } from './seller-scope';
 import { AiGatewayService } from './ai-gateway.service';
 import { BUILTIN_AGENTS } from './agent-registry';
 import { parseLlmJson } from './llm-json';
@@ -29,8 +30,14 @@ export class CustomAgentsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async list(): Promise<AgentListResult> {
-    const rows = await this.db.select().from(aiAgents).orderBy(desc(aiAgents.createdAt));
+  async list(actor: SellerActor): Promise<AgentListResult> {
+    const rows = await this.db
+      .select()
+      .from(aiAgents)
+      .where(andOptional(
+        buildOwnerVisibilityCondition(aiAgents.createdBy, actor),
+      ))
+      .orderBy(desc(aiAgents.createdAt));
     return {
       builtin: BUILTIN_AGENTS,
       custom: rows.map((row) => this.mapAgent(row)),
@@ -70,11 +77,18 @@ export class CustomAgentsService {
     return this.mapAgent(inserted[0]);
   }
 
-  async update(id: string, dto: UpdateAgentDto, actorId: string): Promise<CustomAgentView> {
-    const rows = await this.db.select().from(aiAgents).where(eq(aiAgents.id, id));
+  async update(id: string, dto: UpdateAgentDto, actor: SellerActor): Promise<CustomAgentView> {
+    const rows = await this.db
+      .select()
+      .from(aiAgents)
+      .where(andOptional(
+        eq(aiAgents.id, id),
+        buildOwnerVisibilityCondition(aiAgents.createdBy, actor),
+      ));
     if (rows.length === 0) {
       throw new NotFoundException('Agent 不存在');
     }
+    const actorId = actor.userId ?? '';
     const before = this.mapAgent(rows[0]);
 
     const patch: Partial<typeof aiAgents.$inferInsert> = { updatedAt: new Date() };
@@ -98,11 +112,18 @@ export class CustomAgentsService {
     return after;
   }
 
-  async remove(id: string, actorId: string): Promise<{ success: boolean }> {
-    const rows = await this.db.select().from(aiAgents).where(eq(aiAgents.id, id));
+  async remove(id: string, actor: SellerActor): Promise<{ success: boolean }> {
+    const rows = await this.db
+      .select()
+      .from(aiAgents)
+      .where(andOptional(
+        eq(aiAgents.id, id),
+        buildOwnerVisibilityCondition(aiAgents.createdBy, actor),
+      ));
     if (rows.length === 0) {
       throw new NotFoundException('Agent 不存在');
     }
+    const actorId = actor.userId ?? '';
 
     await this.db.delete(aiAgents).where(eq(aiAgents.id, id));
     await this.audit('ai.agent_delete', id, actorId, { slug: rows[0].slug, name: rows[0].name }, undefined);
@@ -110,11 +131,18 @@ export class CustomAgentsService {
   }
 
   /** 运行自定义 Agent：模板渲染 → 网关调用（用量计入 ai_usage_log，agent=custom:<slug>） */
-  async run(id: string, dto: RunAgentDto, actorId: string): Promise<RunAgentResult> {
-    const rows = await this.db.select().from(aiAgents).where(eq(aiAgents.id, id));
+  async run(id: string, dto: RunAgentDto, actor: SellerActor): Promise<RunAgentResult> {
+    const rows = await this.db
+      .select()
+      .from(aiAgents)
+      .where(andOptional(
+        eq(aiAgents.id, id),
+        buildOwnerVisibilityCondition(aiAgents.createdBy, actor),
+      ));
     if (rows.length === 0) {
       throw new NotFoundException('Agent 不存在');
     }
+    const actorId = actor.userId ?? '';
     const agent = rows[0];
     if (!agent.enabled) {
       throw new ConflictException('该 Agent 已停用');
