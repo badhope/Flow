@@ -78,7 +78,15 @@ docker compose logs -f app
 1. **数据库扩展**：`docker/postgres/init.sql` 首次启动自动执行 `CREATE EXTENSION vector` 与 `pg_trgm`。
 2. **建表**：应用启动时 Drizzle 自动同步表结构（users / products / orders / payments / reviews / favorites / coupons / logistics / audit_logs / ai_usage_log 等）。
 3. **种子数据**：预置示例商品与分类；首个卖家账号可通过注册接口后在数据库把 `role` 改为 `seller`。
-4. **生产必做**：务必设置 `JWT_SECRET`，否则应用会拒绝启动。
+4. **创建平台管理员**（跨店运营必需）：
+
+   ```bash
+   # 宿主机直连（DATABASE_URL 指向库），或 docker compose exec server sh 后执行
+   npm run admin:create -- admin@example.com <强密码> "Platform Admin"
+   # 已存在的 admin 邮箱重复执行 = 重置密码；买家/卖家邮箱会被拒绝提权
+   ```
+
+5. **生产必做**：务必设置 `JWT_SECRET`，否则应用会拒绝启动。
 
 ---
 

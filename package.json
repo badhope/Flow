@@ -40,7 +40,8 @@
     "smoke": "node scripts/smoke.mjs",
     "cli": "node scripts/cli.mjs",
     "smoke:all": "node scripts/run-all-smoke.mjs",
-    "capture:all": "node scripts/capture/run-capture.mjs"
+    "capture:all": "node scripts/capture/run-capture.mjs",
+    "admin:create": "node scripts/db/create-admin.mjs"
   },
   "dependencies": {
     "@nestjs/axios": "^12.0.1",
