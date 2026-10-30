@@ -33,7 +33,10 @@ export class LogisticsService {
 
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {
     this.apiKey = process.env['17TRACK_API_KEY'] || '';
-    this.isDemoMode = !this.apiKey;
+    // 诚实标注（v1.21.1 修正）：当前版本 17TRACK 未实现真实 HTTP 查询，
+    // getTrackingInfo 恒走 generateDemoTimeline；isDemo 恒为 true，
+    // 前端「演示物流」水印恒显示。配置 Key 仅预留，不改变行为（真实接入见 Roadmap）。
+    this.isDemoMode = true;
   }
 
   async registerTracking(
