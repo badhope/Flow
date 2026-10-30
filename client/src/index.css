@@ -2,5 +2,6 @@
 @import "tw-animate-css";
 @import "./tailwind-theme.css";
 @import "./typography.css";
+@import "./flow-design.css";
 
 @config "../../tailwind.config.ts";

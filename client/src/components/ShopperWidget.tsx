@@ -72,6 +72,17 @@ const ShopperWidget: React.FC = () => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const onIntent = (event: Event): void => {
+      const text = (event as CustomEvent<{ text?: string }>).detail?.text?.trim();
+      if (!text) return;
+      setOpen(true);
+      void handleSend(text);
+    };
+    window.addEventListener('flow:shopper-intent', onIntent);
+    return () => window.removeEventListener('flow:shopper-intent', onIntent);
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages.length, sending, open]);
 

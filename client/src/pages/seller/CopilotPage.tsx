@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Bot,
@@ -14,7 +15,6 @@ import {
   ShieldAlert,
   Sparkles,
   Trash2,
-  Wrench,
   X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +33,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Markdown } from '@/components/ui/markdown';
+import AgentTrace, { type TraceStep } from '@/components/AgentTrace';
+import ApprovalCard from '@/components/ApprovalCard';
 import { copilotApi } from '@/api';
 import type {
   CopilotAction,
@@ -49,13 +51,6 @@ import type {
 import { toast } from 'sonner';
 import { extractErrorMessage, notifyError } from '@/lib/error-feedback';
 
-const STATUS_LABEL: Record<CopilotAction['status'], string> = {
-  pending: '待确认',
-  executed: '已执行',
-  rejected: '已拒绝',
-  failed: '执行失败',
-};
-
 const QUICK_PROMPTS: Array<{ label: string; prompt: string }> = [
   { label: '店铺概况', prompt: '看一下店铺概况，今天表现怎么样？' },
   { label: '待发货订单', prompt: '帮我查一下待发货的订单' },
@@ -64,6 +59,7 @@ const QUICK_PROMPTS: Array<{ label: string; prompt: string }> = [
 ];
 
 const CopilotPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<CopilotConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CopilotConversationDetail | null>(null);
@@ -326,12 +322,25 @@ const CopilotPage: React.FC = () => {
   useEffect(() => {
     void (async () => {
       const rows = await fetchConversations();
+      const requestedId = searchParams.get('c');
+      if (requestedId && rows.some((row) => row.id === requestedId)) {
+        await loadConversation(requestedId);
+        setSearchParams({}, { replace: true });
+        return;
+      }
       if (rows.length > 0) {
         await loadConversation(rows[0].id);
       }
     })();
     void fetchInsights();
-  }, [fetchConversations, loadConversation, fetchInsights]);
+  }, [fetchConversations, loadConversation, fetchInsights, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const prompt = searchParams.get('q');
+    if (!prompt || sending) return;
+    setSearchParams({}, { replace: true });
+    void handleSend(prompt);
+  }, [searchParams, sending, setSearchParams]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -489,14 +498,14 @@ const CopilotPage: React.FC = () => {
     );
     if (batchActions.length === 0) return null;
     return (
-      <div key={`batch-${batchId}`} className="mb-3 rounded-lg border border-indigo-300 bg-indigo-50 p-3">
+      <div key={`batch-${batchId}`} className="flow-panel mb-3 border-[var(--flow-accent)]/30 bg-[var(--flow-accent-soft)] p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-indigo-700">
+            <div className="flex items-center gap-2 text-xs text-[var(--flow-accent)]">
               <ListChecks className="h-3.5 w-3.5" />
               <span className="font-semibold">多步计划 · 共 {batchActions.length} 步（按顺序执行，失败即停）</span>
             </div>
-            <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-slate-800">
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-[var(--flow-text-1)]">
               {batchActions.map((action) => (
                 <li key={action.id}>{action.summary}</li>
               ))}
@@ -522,76 +531,41 @@ const CopilotPage: React.FC = () => {
   };
 
   const renderActionCard = (action: CopilotAction): React.ReactNode => (
-    <div
+    <ApprovalCard
       key={action.id}
-      className={`mt-2 rounded-lg border p-3 ${
-        action.status === 'pending'
-          ? 'border-amber-300 bg-amber-50'
-          : action.status === 'executed'
-            ? 'border-emerald-200 bg-emerald-50'
-            : 'border-slate-200 bg-slate-50'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Wrench className="h-3.5 w-3.5" />
-            <span className="font-mono">{action.toolName}</span>
-            <Badge variant={action.status === 'pending' ? 'default' : 'secondary'}>
-              {STATUS_LABEL[action.status]}
-            </Badge>
-          </div>
-          <div className="mt-1 text-sm font-medium text-slate-800">{action.summary}</div>
-          {action.result && (
-            <div className="mt-1 text-xs text-slate-600">{action.result}</div>
-          )}
-          {action.errorMessage && (
-            <div className="mt-1 text-xs text-red-600">{action.errorMessage}</div>
-          )}
-        </div>
-        {action.status === 'pending' && (
-          <div className="flex shrink-0 gap-2">
-            <Button
-              size="sm"
-              onClick={() => void handleApprove(action)}
-              disabled={resolvingId === action.id}
-            >
-              {resolvingId === action.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-              批准执行
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setRejectTarget(action);
-                setRejectReason('');
-              }}
-              disabled={resolvingId === action.id}
-            >
-              <X className="h-3.5 w-3.5" />
-              拒绝
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+      action={action}
+      busy={resolvingId === action.id}
+      onApprove={async () => handleApprove(action)}
+      onReject={async () => {
+        setRejectTarget(action);
+        setRejectReason('');
+      }}
+    />
   );
 
   const renderMessage = (message: CopilotMessage): React.ReactNode => {
     if (message.role === 'tool') {
       return (
         <div key={message.id} className="flex justify-center">
-          <details className="w-full max-w-2xl rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <summary className="cursor-pointer select-none">
-              <span className="font-mono">{message.toolName}</span>
-              <span className="ml-2">{message.toolOk ? '执行成功' : '执行失败'}</span>
-            </summary>
-            <pre className="mt-2 whitespace-pre-wrap break-words font-sans">{message.content}</pre>
-          </details>
+          <div className="w-full max-w-2xl rounded-xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] px-3 py-2 text-xs text-[var(--flow-text-2)]">
+            <details>
+              <summary className="cursor-pointer select-none">
+                <span className="flow-mono text-[var(--flow-text-1)]">{message.toolName}</span>
+                <span className="ml-2">{message.toolOk ? '执行成功' : '执行失败'}</span>
+              </summary>
+              <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-[var(--flow-text-2)]">{message.content}</pre>
+            </details>
+            <AgentTrace
+              steps={[{
+                id: `${message.id}-tool`,
+                label: message.toolOk ? '读取真实店铺数据' : '读取数据失败',
+                tool: message.toolName,
+                status: message.toolOk ? 'done' : 'failed',
+                detail: message.toolArgs ? '参数已校验' : undefined,
+              }]}
+              defaultOpen={false}
+            />
+          </div>
         </div>
       );
     }
@@ -603,18 +577,18 @@ const CopilotPage: React.FC = () => {
 
     return (
       <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-[85%] ${isUser ? 'order-2' : ''}`}>
+        <div className={`min-w-0 max-w-[85%] ${isUser ? 'order-2' : ''}`}>
           <div
             className={`rounded-2xl px-4 py-2.5 text-sm ${
               isUser
-                ? 'bg-[#0B1F3A] text-white'
-                : 'border border-slate-200 bg-white text-slate-800'
+                ? 'bg-[var(--flow-accent)] text-[var(--flow-accent-ink)]'
+                : 'border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] text-[var(--flow-text-1)]'
             }`}
           >
             {isUser ? (
               <div className="whitespace-pre-wrap break-words">{message.content}</div>
             ) : (
-              <Markdown className="prose-sm max-w-none">{message.content}</Markdown>
+              <Markdown className="flow-body prose-sm max-w-none text-[var(--flow-text-1)]">{message.content}</Markdown>
             )}
           </div>
           {action && renderActionCard(action)}
@@ -624,11 +598,11 @@ const CopilotPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-150px)] min-h-[560px] gap-4">
+    <div className="flow-dark flow-radial-glow flex h-[calc(100vh-56px)] min-h-[560px] gap-3 -m-4 p-3 lg:-m-6 lg:p-4">
       {/* 会话列表 */}
-      <Card className="hidden w-64 shrink-0 flex-col overflow-hidden md:flex">
-        <div className="flex items-center justify-between border-b p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+      <Card className="flow-panel hidden w-64 shrink-0 flex-col overflow-hidden border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] md:flex">
+        <div className="flex items-center justify-between border-b border-[var(--flow-line-1)] p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--flow-text-1)]">
             <Bot className="h-4 w-4" />
             对话
           </div>
@@ -640,18 +614,18 @@ const CopilotPage: React.FC = () => {
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-1 p-2">
             {loadingList && (
-              <div className="flex items-center gap-2 px-2 py-3 text-sm text-slate-500">
+              <div className="flex items-center gap-2 py-3 text-sm text-[var(--flow-text-3)]">
                 <Loader2 className="h-4 w-4 animate-spin" /> 加载中
               </div>
             )}
             {!loadingList && conversations.length === 0 && (
-              <div className="px-2 py-3 text-sm text-slate-500">还没有对话，直接开始提问即可。</div>
+              <div className="px-2 py-3 text-sm text-[var(--flow-text-3)]">还没有对话，直接开始提问即可。</div>
             )}
             {conversations.map((conversation) => (
               <div
                 key={conversation.id}
                 className={`group flex items-center gap-1 rounded-md px-2 py-2 text-sm ${
-                  activeId === conversation.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'
+                  activeId === conversation.id ? 'bg-[var(--flow-accent-soft)] text-[var(--flow-text-1)]' : 'text-[var(--flow-text-2)] hover:bg-[var(--flow-surface-2)]'
                 }`}
               >
                 <button
@@ -682,7 +656,7 @@ const CopilotPage: React.FC = () => {
         {/* 店铺巡检：常驻左侧，随时可点一条让副驾处理 */}
         <div className="border-t p-2">
           <div className="mb-1 flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--flow-text-2)]">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
               店铺巡检
               {(insights?.insights.length ?? 0) > 0 && (
@@ -752,16 +726,16 @@ const CopilotPage: React.FC = () => {
       </Card>
 
       {/* 对话区 */}
-      <Card className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <Card className="flow-panel flex min-w-0 flex-1 flex-col overflow-hidden border-[var(--flow-line-1)] bg-[var(--flow-surface-1)]">
+        <div className="flex items-center justify-between border-b border-[var(--flow-line-1)] px-4 py-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0B1F3A] text-white">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--flow-accent-soft)] text-[var(--flow-accent)]">
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-slate-800">AI 运营副驾</div>
-              <div className="text-xs text-slate-500">
-                读取真实店铺数据 · 写操作需你确认后执行
+              <div className="text-sm font-semibold text-[var(--flow-text-1)]">AI 运营副驾</div>
+              <div className="text-xs text-[var(--flow-text-3)]">
+                读取真实数据 · 写操作需要人工批准
               </div>
             </div>
           </div>
