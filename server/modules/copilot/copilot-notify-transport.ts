@@ -59,7 +59,9 @@ export class NotifyTransport {
     }
     // 与巡检设置同一策略：生产拦截内网地址；开发放行（本地 mock / 局域网 webhook 合法）
     if (process.env.NODE_ENV === 'production' && !isSafePublicHttpUrl(url)) {
-      this.logger.warn(`Webhook 地址被拒绝（私网/保留地址）: ${url}`);
+      let safeHost = 'invalid';
+      try { safeHost = new URL(url).hostname; } catch { /* validation already failed */ }
+      this.logger.warn(`Webhook 地址被拒绝（私网/保留地址）: host=${safeHost}`);
       return {
         ok: false,
         channel: 'webhook',
