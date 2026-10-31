@@ -15,12 +15,12 @@ const SellerRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children })
 
   if (loading || (user === null && typeof window === 'undefined')) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0B1F3A]">
+      <div className="flex h-screen items-center justify-center bg-[var(--flow-ink)]">
         <div className="flex flex-col items-center gap-4">
-          <div className="size-14 rounded-xl bg-[#00C2B8]/20 flex items-center justify-center text-2xl font-bold text-[#00C2B8]">
+          <div className="size-14 rounded-xl bg-[var(--flow-accent)]/20 flex items-center justify-center text-2xl font-bold text-[var(--flow-accent)]">
             G
           </div>
-          <div className="size-8 border-4 border-[#00C2B8] border-t-transparent rounded-full animate-spin" />
+          <div className="size-8 border-4 border-[var(--flow-accent)] border-t-transparent rounded-full animate-spin" />
           <div className="text-sm text-slate-300">{t.common.loading}...</div>
         </div>
       </div>

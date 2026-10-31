@@ -26,6 +26,9 @@
   --flow-accent-ink: #0a0c08;
   --flow-accent-soft: rgba(198, 255, 74, 0.12);
 
+  /* 买家端主墨色（导航/页脚/深色块），比纯黑更有品牌感 */
+  --flow-ink: #0b1f3a;
+
   /* 语义色 */
   --flow-cyan: #22d3c5;
   --flow-warn: #ffb020;

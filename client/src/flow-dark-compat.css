@@ -1,0 +1,131 @@
+/* ============================================================================
+   Flow · 旧调色板兼容层（Dark Adapter）
+   背景：v1.21.1 历史页面大量硬编码 slate/blue/amber/emerald，逐页替换会产生
+   上千处 diff 与回归风险。此层只在 `.flow-dark` 作用域内把旧工具类映射到
+   Flow token，使未迁移页面立即获得正确对比度；迁移完成后的页面自然覆盖。
+   规则：只做「颜色/边框/阴影」映射，不动布局、间距与交互，避免行为漂移。
+   ========================================================================== */
+
+/* 表面 */
+.flow-dark .bg-white { background-color: var(--flow-surface-1); }
+.flow-dark .bg-slate-50 { background-color: var(--flow-surface-2); }
+.flow-dark .bg-slate-100 { background-color: var(--flow-surface-2); }
+.flow-dark .bg-slate-200 { background-color: var(--flow-surface-3); }
+.flow-dark .bg-gray-50 { background-color: var(--flow-surface-2); }
+.flow-dark .bg-gray-100 { background-color: var(--flow-surface-3); }
+.flow-dark .bg-white\/80,
+.flow-dark .bg-white\/90,
+.flow-dark .bg-white\/95 { background-color: rgba(11, 13, 18, 0.85); }
+
+/* 文本 */
+.flow-dark .text-slate-900,
+.flow-dark .text-gray-900 { color: var(--flow-text-1); }
+.flow-dark .text-slate-800,
+.flow-dark .text-gray-800 { color: var(--flow-text-1); }
+.flow-dark .text-slate-700,
+.flow-dark .text-gray-700 { color: var(--flow-text-1); }
+.flow-dark .text-slate-600,
+.flow-dark .text-gray-600 { color: var(--flow-text-2); }
+.flow-dark .text-slate-500,
+.flow-dark .text-gray-500 { color: var(--flow-text-2); }
+.flow-dark .text-slate-400,
+.flow-dark .text-gray-400 { color: var(--flow-text-3); }
+.flow-dark .text-slate-300 { color: var(--flow-text-3); }
+
+/* 描边 */
+.flow-dark .border-slate-200,
+.flow-dark .border-gray-200 { border-color: var(--flow-line-1); }
+.flow-dark .border-slate-300,
+.flow-dark .border-gray-300 { border-color: var(--flow-line-2); }
+.flow-dark .border-slate-100,
+.flow-dark .border-gray-100 { border-color: var(--flow-line-1); }
+.flow-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.flow-dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--flow-line-1);
+}
+
+/* 交互态 */
+.flow-dark .hover\:bg-slate-50:hover,
+.flow-dark .hover\:bg-slate-100:hover { background-color: var(--flow-surface-2); }
+.flow-dark .hover\:text-slate-900:hover,
+.flow-dark .hover\:text-slate-800:hover { color: var(--flow-text-1); }
+
+/* 品牌蓝 → 强调色（原主色系全部降级为「信息色」，避免与 accent 抢主次） */
+.flow-dark .text-blue-600,
+.flow-dark .text-blue-700,
+.flow-dark .text-blue-800,
+.flow-dark .text-indigo-600,
+.flow-dark .text-indigo-700 { color: var(--flow-cyan); }
+.flow-dark .bg-blue-50,
+.flow-dark .bg-indigo-50 { background-color: rgba(34, 211, 197, 0.1); }
+.flow-dark .bg-blue-100,
+.flow-dark .bg-indigo-100 { background-color: rgba(34, 211, 197, 0.16); }
+.flow-dark .border-blue-200,
+.flow-dark .border-indigo-200 { border-color: rgba(34, 211, 197, 0.32); }
+.flow-dark .bg-blue-600,
+.flow-dark .bg-blue-800 { background-color: var(--flow-accent); color: var(--flow-accent-ink); }
+
+/* 语义色：soft 背景在暗底上必须降不透明度，否则刺眼 */
+.flow-dark .bg-amber-50 { background-color: rgba(255, 176, 32, 0.1); }
+.flow-dark .bg-amber-100 { background-color: rgba(255, 176, 32, 0.16); }
+.flow-dark .text-amber-700,
+.flow-dark .text-amber-800,
+.flow-dark .text-amber-900 { color: var(--flow-warn); }
+.flow-dark .border-amber-200,
+.flow-dark .border-amber-300 { border-color: rgba(255, 176, 32, 0.32); }
+
+.flow-dark .bg-emerald-50,
+.flow-dark .bg-green-50 { background-color: rgba(61, 220, 151, 0.1); }
+.flow-dark .bg-emerald-100 { background-color: rgba(61, 220, 151, 0.16); }
+.flow-dark .text-emerald-600,
+.flow-dark .text-emerald-700,
+.flow-dark .text-green-700 { color: var(--flow-ok); }
+.flow-dark .border-emerald-200 { border-color: rgba(61, 220, 151, 0.3); }
+
+.flow-dark .bg-red-50,
+.flow-dark .bg-rose-50 { background-color: rgba(255, 90, 95, 0.1); }
+.flow-dark .bg-red-100 { background-color: rgba(255, 90, 95, 0.16); }
+.flow-dark .text-red-500,
+.flow-dark .text-red-600,
+.flow-dark .text-red-700,
+.flow-dark .text-rose-600 { color: var(--flow-danger); }
+.flow-dark .border-red-200,
+.flow-dark .border-rose-200 { border-color: rgba(255, 90, 95, 0.3); }
+
+.flow-dark .bg-teal-50 { background-color: rgba(34, 211, 197, 0.1); }
+.flow-dark .text-teal-700 { color: var(--flow-cyan); }
+
+/* 紫色原「AI」语义 → 统一让位给 accent，避免出现两套 AI 色 */
+.flow-dark .bg-violet-50,
+.flow-dark .bg-purple-50 { background-color: var(--flow-accent-soft); }
+.flow-dark .text-violet-600,
+.flow-dark .text-purple-600,
+.flow-dark .text-violet-700 { color: var(--flow-accent); }
+
+/* shadcn 语义 token 兜底（部分组件直接引用 var(--background)） */
+.flow-dark [data-slot='dialog-content'],
+.flow-dark [data-slot='dropdown-menu-content'],
+.flow-dark [data-slot='select-content'],
+.flow-dark [data-slot='popover-content'] {
+  background-color: var(--flow-surface-2);
+  border-color: var(--flow-line-2);
+  color: var(--flow-text-1);
+}
+
+/* 表格：暗底需要靠行分隔线而不是斑马纹 */
+.flow-dark table thead tr { background-color: var(--flow-surface-2); }
+.flow-dark table tbody tr:hover { background-color: var(--flow-surface-2); }
+
+/* 占位与禁用 */
+.flow-dark ::placeholder { color: var(--flow-text-3); }
+.flow-dark .disabled\:opacity-50:disabled { opacity: 0.45; }
+
+/* 滚动条：暗底默认滚动条在 Windows 上会露出浅色轨道 */
+.flow-dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+.flow-dark ::-webkit-scrollbar-track { background: var(--flow-surface-1); }
+.flow-dark ::-webkit-scrollbar-thumb {
+  background: var(--flow-surface-3);
+  border-radius: 6px;
+  border: 2px solid var(--flow-surface-1);
+}
+.flow-dark ::-webkit-scrollbar-thumb:hover { background: #2a3040; }

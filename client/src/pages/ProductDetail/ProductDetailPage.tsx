@@ -173,7 +173,7 @@ const ProductDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
+      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
@@ -181,7 +181,7 @@ const ProductDetailPage: React.FC = () => {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
+      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
         {t.common.error}
       </div>
     );
@@ -299,7 +299,7 @@ const ProductDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flow-store min-h-screen">
       <div className="container mx-auto px-6 py-6" id="reviews">
         <Button
           variant="ghost"

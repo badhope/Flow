@@ -48,6 +48,7 @@ import type {
   UpdateShippingTemplateRequest,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 const emptyRule = (): ShippingRule => ({
   countries: [],
@@ -178,17 +179,17 @@ const ShippingTemplatesPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Truck className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-slate-900">运费模板管理</h2>
-        </div>
-        <Button size="sm" onClick={handleCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          新建模板
-        </Button>
-      </div>
+      <SellerPageHeader
+        eyebrow={'Shipping'}
+        title={'运费模板'}
+        description={'按地区与重量区间配置运费，结算时以服务端报价为准。'}
+        actions={
+          <Button size="sm" onClick={handleCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            新建模板
+          </Button>
+        }
+      />
 
       {/* 计算器 */}
       <ShippingCalculator />

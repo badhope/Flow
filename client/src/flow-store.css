@@ -1,0 +1,125 @@
+/* ============================================================================
+   Flow · 买家端（Storefront）设计语言
+   定位：AI 原生商城的「可信赖浏览面」。与卖家深色工作台形成双模态，
+   共享同一套 token 与节奏，但保持浅色、克制、留白充分。
+   ========================================================================== */
+
+.flow-store {
+  --store-surface: #ffffff;
+  --store-surface-2: #f7f8fa;
+  --store-line: #e8eaef;
+  --store-line-strong: #d8dbe3;
+  --store-ink: #0b1f3a;
+  --store-text: #1b2233;
+  --store-muted: #5f6675;
+  --store-faint: #8b93a3;
+  --store-radius: 14px;
+  --store-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -12px rgba(16, 24, 40, 0.12);
+
+  background: var(--store-surface-2);
+  color: var(--store-text);
+}
+
+/* 卡片：统一细描边 + 极轻阴影，替代 shadcn 默认重边框 */
+.flow-store .store-card {
+  background: var(--store-surface);
+  border: 1px solid var(--store-line);
+  border-radius: var(--store-radius);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.flow-store .store-card-hover {
+  transition: border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.flow-store .store-card-hover:hover {
+  border-color: var(--store-line-strong);
+  box-shadow: var(--store-shadow);
+  transform: translateY(-2px);
+}
+
+/* 分节标题：比默认 h2 更紧凑，配合说明文字 */
+.flow-store .store-section-title {
+  font-size: 1rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--store-ink);
+}
+.flow-store .store-section-sub {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--store-faint);
+}
+
+/* 工具条：筛选/排序区统一为无边框浅底 */
+.flow-store .store-toolbar {
+  background: var(--store-surface);
+  border: 1px solid var(--store-line);
+  border-radius: 12px;
+}
+
+/* 选中态：用品牌墨色左侧条，不用整块蓝底 */
+.flow-store .store-filter-active {
+  background: rgba(11, 31, 58, 0.05);
+  color: var(--store-ink);
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--store-ink);
+}
+
+/* 价格与数字：等宽数字，避免列表跳动 */
+.flow-store .store-price {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 暗色按钮（买家端 CTA） */
+.flow-store .store-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 10px;
+  background: var(--store-ink);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+.flow-store .store-btn-primary:hover { opacity: 0.9; }
+.flow-store .store-btn-primary:active { transform: translateY(1px); }
+
+.flow-store .store-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.5rem;
+  padding: 0 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--store-line-strong);
+  color: var(--store-text);
+  font-size: 0.875rem;
+  background: var(--store-surface);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.flow-store .store-btn-ghost:hover {
+  border-color: var(--store-ink);
+  background: var(--store-surface-2);
+}
+
+/* 空态：不再是一行灰字 */
+.flow-store .store-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+  text-align: center;
+  border: 1px dashed var(--store-line-strong);
+  border-radius: var(--store-radius);
+  background: var(--store-surface);
+}

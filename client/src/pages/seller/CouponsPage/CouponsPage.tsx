@@ -43,6 +43,7 @@ import type {
   CreateCouponRequest,
   UpdateCouponRequest,
 } from '@shared/api.interface';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 interface CouponFormData {
   code: string;
@@ -336,13 +337,12 @@ const CouponsPage: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Tag className="size-6 text-indigo-500" />
-          {t.seller.couponManagement}
-        </h1>
+    <div className="space-y-4">
+      <SellerPageHeader
+        eyebrow="Marketing"
+        title={t.seller.couponManagement}
+        description="百分比 / 固定金额 / 包邮三种类型，支持使用范围与限次；核销为原子操作。"
+        actions={
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={handleCreate}>
@@ -368,7 +368,8 @@ const CouponsPage: React.FC = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+        }
+      />
 
       {/* Coupon List */}
       <Card className="rounded-xl bg-white">

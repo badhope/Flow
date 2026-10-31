@@ -15,6 +15,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { copilotApi } from '@/api';
+import { buildPaletteItems, type PaletteItem as BasePaletteItem, type PaletteNavItem } from '@/lib/command-palette';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -24,14 +25,22 @@ import { useLanguage } from '@/contexts/LanguageContext';
  * - 输入为空：展示导航与上下文动作
  * - 输入有词：命中导航则排在前面，同时提供「问 AI」兜底动作
  */
-interface PaletteItem {
-  id: string;
-  label: string;
-  hint?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  group: 'navigate' | 'ask';
-  run: () => void | Promise<void>;
+function iconForPath(path?: string): React.ComponentType<{ className?: string }> {
+  switch (path) {
+    case '/seller/copilot': return Bot;
+    case '/seller/dashboard': return LayoutDashboard;
+    case '/seller/products': return Package;
+    case '/seller/orders': return ShoppingCart;
+    case '/seller/inquiries': return Users;
+    case '/seller/ai-center': return Sparkles;
+    default: return Search;
+  }
 }
+
+type PaletteItem = BasePaletteItem & {
+  icon: React.ComponentType<{ className?: string }>;
+  run: () => void | Promise<void>;
+};
 
 const SellerCommandPalette: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -74,41 +83,35 @@ const SellerCommandPalette: React.FC = () => {
     [navigate, busy],
   );
 
-  const navItems: PaletteItem[] = useMemo(
+  const navItems: PaletteNavItem[] = useMemo(
     () => [
-      { id: 'n-copilot', label: zh ? 'AI 运营副驾' : 'AI Copilot', hint: zh ? '对话 · 工具调用 · 审批' : 'Chat · tools · approvals', icon: Bot, group: 'navigate', run: () => go('/seller/copilot') },
-      { id: 'n-dash', label: zh ? '数据看板' : 'Dashboard', hint: zh ? 'GMV · 趋势 · 分类' : 'GMV · trend · categories', icon: LayoutDashboard, group: 'navigate', run: () => go('/seller/dashboard') },
-      { id: 'n-products', label: zh ? '商品管理' : 'Products', hint: zh ? 'SPU/SKU · 批量 · AI 文案' : 'SPU/SKU · bulk · AI copy', icon: Package, group: 'navigate', run: () => go('/seller/products') },
-      { id: 'n-orders', label: zh ? '订单管理' : 'Orders', hint: zh ? '状态流转 · 发货' : 'Status · shipping', icon: ShoppingCart, group: 'navigate', run: () => go('/seller/orders') },
-      { id: 'n-inquiries', label: zh ? '咨询管理' : 'Inquiries', hint: zh ? '客服会话' : 'Support threads', icon: Users, group: 'navigate', run: () => go('/seller/inquiries') },
-      { id: 'n-ai', label: zh ? 'AI 分析中心' : 'AI Center', hint: zh ? 'Agent · 用量 · 模型' : 'Agents · usage · models', icon: Sparkles, group: 'navigate', run: () => go('/seller/ai-center') },
+      { id: 'n-copilot', label: zh ? 'AI 运营副驾' : 'AI Copilot', hint: zh ? '对话 · 工具调用 · 审批' : 'Chat · tools · approvals', path: '/seller/copilot' },
+      { id: 'n-dash', label: zh ? '数据看板' : 'Dashboard', hint: zh ? 'GMV · 趋势 · 分类' : 'GMV · trend · categories', path: '/seller/dashboard' },
+      { id: 'n-products', label: zh ? '商品管理' : 'Products', hint: zh ? 'SPU/SKU · 批量 · AI 文案' : 'SPU/SKU · bulk · AI copy', path: '/seller/products' },
+      { id: 'n-orders', label: zh ? '订单管理' : 'Orders', hint: zh ? '状态流转 · 发货' : 'Status · shipping', path: '/seller/orders' },
+      { id: 'n-inquiries', label: zh ? '咨询管理' : 'Inquiries', hint: zh ? '客服会话' : 'Support threads', path: '/seller/inquiries' },
+      { id: 'n-ai', label: zh ? 'AI 分析中心' : 'AI Center', hint: zh ? 'Agent · 用量 · 模型' : 'Agents · usage · models', path: '/seller/ai-center' },
     ],
-    [zh, go],
+    [zh],
   );
 
-  const items: PaletteItem[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matched = q
-      ? navItems.filter(
-          (item) =>
-            item.label.toLowerCase().includes(q) ||
-            (item.hint ?? '').toLowerCase().includes(q),
-        )
-      : navItems;
+  const built = useMemo(() => buildPaletteItems(query, navItems), [query, navItems]);
 
-    const askItem: PaletteItem | null = q
-      ? {
-          id: 'ask-ai',
-          label: zh ? `问 AI：${query.trim()}` : `Ask AI: ${query.trim()}`,
-          hint: zh ? '交给运营副驾，可调用工具并生成待审批动作' : 'Hand off to Copilot with tool access',
-          icon: Wand2,
-          group: 'ask',
-          run: () => askAi(query),
-        }
-      : null;
-
-    return askItem ? [askItem, ...matched] : matched;
-  }, [query, navItems, askAi, zh]);
+  const items: PaletteItem[] = useMemo(
+    () =>
+      built.map((item): PaletteItem =>
+        item.kind === 'ask'
+          ? { ...item, icon: Wand2, run: () => askAi(item.query ?? query) }
+          : {
+              ...item,
+              icon: iconForPath(item.path),
+              run: () => {
+                if (item.path) go(item.path);
+              },
+            },
+      ),
+    [built, askAi, go, query],
+  );
 
   useEffect(() => {
     setActive(0);
@@ -213,7 +216,7 @@ const SellerCommandPalette: React.FC = () => {
                         : 'text-[var(--flow-text-2)] hover:bg-[var(--flow-surface-2)]'
                     }`}
                   >
-                    <Icon className={`size-4 shrink-0 ${item.group === 'ask' ? 'text-[var(--flow-accent)]' : ''}`} />
+                    <Icon className={`size-4 shrink-0 ${item.kind === 'ask' ? 'text-[var(--flow-accent)]' : ''}`} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm">{item.label}</span>
                       {item.hint && (

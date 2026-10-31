@@ -168,7 +168,7 @@ const ShopperWidget: React.FC = () => {
   };
 
   const renderAction = (action: CopilotAction): React.ReactNode => (
-    <div key={action.id} className="mt-2 rounded-lg border border-[#00C2B8]/40 bg-teal-50 p-2.5 text-sm">
+    <div key={action.id} className="mt-2 rounded-lg border border-[var(--flow-accent)]/40 bg-teal-50 p-2.5 text-sm">
       <div className="flex items-center gap-1.5 text-xs text-teal-700">
         <ShoppingBag className="h-3.5 w-3.5" />
         {action.status === 'pending' ? '待确认' : action.status === 'executed' ? '已加入购物车' : '未执行'}
@@ -194,11 +194,11 @@ const ShopperWidget: React.FC = () => {
     <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end gap-3">
       {open && (
         <Card className="flex h-[30rem] w-80 flex-col overflow-hidden rounded-xl shadow-xl sm:w-96">
-          <div className="flex items-center justify-between bg-[#0B1F3A] p-3.5 text-white">
+          <div className="flex items-center justify-between bg-[var(--flow-ink)] p-3.5 text-white">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-[#00C2B8]" />
+              <Sparkles className="h-4 w-4 text-[var(--flow-accent)]" />
               <span className="text-sm font-semibold">{copy.title}</span>
-              <Badge className="bg-[#00C2B8]/20 text-[10px] text-[#00C2B8]">AI</Badge>
+              <Badge className="bg-[var(--flow-accent)]/20 text-[10px] text-[var(--flow-accent)]">AI</Badge>
             </div>
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-white hover:bg-white/10" onClick={() => setOpen(false)}>
               <X className="h-4 w-4" />
@@ -239,7 +239,7 @@ const ShopperWidget: React.FC = () => {
                     <div className={`max-w-[85%] ${isUser ? 'text-right' : ''}`}>
                       <div
                         className={`inline-block whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm ${
-                          isUser ? 'bg-[#0B1F3A] text-white' : 'bg-slate-100 text-slate-800'
+                          isUser ? 'bg-[var(--flow-ink)] text-white' : 'bg-slate-100 text-slate-800'
                         }`}
                       >
                         {message.content}
@@ -284,7 +284,7 @@ const ShopperWidget: React.FC = () => {
 
       <Button
         size="lg"
-        className="size-12 rounded-full bg-[#00C2B8] shadow-lg hover:bg-[#00a89f]"
+        className="size-12 rounded-full bg-[var(--flow-accent)] shadow-lg hover:brightness-95"
         onClick={() => setOpen((prev) => !prev)}
         aria-label={copy.title}
       >

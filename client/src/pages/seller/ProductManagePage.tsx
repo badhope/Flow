@@ -52,6 +52,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Image as ImageComponent } from '@/components/ui/image';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 import { productsApi, categoriesApi, aiApi } from '@/api';
 import type {
   Product,
@@ -113,6 +115,8 @@ const STATUS_MAP: Record<string, { label: string; variant: string }> = {
 const PAGE_SIZE = 10;
 
 const ProductManagePage: React.FC = () => {
+  const { language } = useLanguage();
+  const zh = language === 'zh';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -509,9 +513,23 @@ const ProductManagePage: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <SellerPageHeader
+        eyebrow={zh ? '商品' : 'Catalog'}
+        title={zh ? '商品管理' : 'Products'}
+        description={
+          zh
+            ? 'SPU + 多规格 SKU、批量上下架、CSV 导入导出；上架前自动跑 6 项完整性门禁。'
+            : 'SPU with multi-SKU variants, bulk status, CSV import/export, and a 6-point publish gate.'
+        }
+        actions={
+          <span className="flow-caption">
+            {zh ? `共 ${total} 个商品` : `${total} products`}
+          </span>
+        }
+      />
+
       {/* 顶部工具栏 */}
-      <Card className="shadow-sm">
-        <CardContent className="flex flex-wrap items-center gap-3 p-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] p-3">
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -549,24 +567,23 @@ const ProductManagePage: React.FC = () => {
           </Button>
 
            <div className="ml-auto flex gap-2">
-             <Button onClick={() => void handleExport()} variant="outline">
+             <Button onClick={() => void handleExport()} variant="outline" size="sm">
                <Download className="h-4 w-4 mr-1" />
                导出 CSV
              </Button>
-             <Button onClick={() => setImportOpen(true)} variant="outline">
+             <Button onClick={() => setImportOpen(true)} variant="outline" size="sm">
                <Upload className="h-4 w-4 mr-1" />
                批量导入
              </Button>
-             <Button onClick={handleAdd}>
+             <Button onClick={handleAdd} size="sm">
                <Plus className="h-4 w-4" />
                新增商品
              </Button>
            </div>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* 商品列表 */}
-      <Card className="shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)]">
         {selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-3 border-b bg-blue-50/60 px-4 py-2 text-sm">
             <span className="text-slate-700">已选 {selectedIds.size} 个商品</span>
@@ -581,7 +598,6 @@ const ProductManagePage: React.FC = () => {
             </Button>
           </div>
         )}
-        <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -721,8 +737,7 @@ const ProductManagePage: React.FC = () => {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* 新增/编辑商品弹窗 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

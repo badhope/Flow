@@ -44,7 +44,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0B1F3A] via-[#0f2a4a] to-[#0B1F3A] py-12 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#07080B] via-[#12161F] to-[#07080B] py-12 px-4">
       <Card className="w-full max-w-md p-8">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
@@ -92,7 +92,7 @@ const LoginPage: React.FC = () => {
 
         <div className="mt-6 text-center text-sm text-slate-500">
           {t.auth.noAccount}{' '}
-          <Link to="/register" className="text-[#00C2B8] hover:underline font-medium">
+          <Link to="/register" className="text-[var(--flow-accent)] hover:underline font-medium">
             {t.auth.signUp}
           </Link>
         </div>

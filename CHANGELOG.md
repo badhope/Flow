@@ -5,6 +5,63 @@
 
 ---
 
+## [1.22.0] — 2026-10-31
+
+**主题：从「电商模板 + 后台」重构为「AI 原生平台」；同时补齐多租户安全短板。**
+
+### Security
+
+- AI Agent 按卖家隔离：趋势、选品、历史报告、自定义 Agent 的查询与操作全部加 seller 作用域；
+  管理员保留跨店视图。
+- 模型配置作用域化：`llm_*` 改为 `{userId}:` 前缀键，任意卖家无法读写他人或平台配置；
+  未配置时回退环境变量，不串用他人密钥。
+- 巡检与通知设置按卖家作用域；定时调度只由平台（admin）配置驱动。
+- 演示支付生产门禁：`NODE_ENV=production` 下 `provider=demo` 默认 403，
+  需显式 `ALLOW_DEMO_PAYMENT=true` 才放行。
+- 出站 URL 防 SSRF：webhook 地址、巡检通知地址、LLM Base URL 统一拒绝环回、私网、
+  CGNAT、链路本地与裸主机名。
+- 依赖：nodemailer 7.0.13 → 10.3.1，multer 通过 overrides 升至 2.5.0；`npm audit --omit=dev` 归零。
+
+### Added
+
+- 双模态设计系统（`docs/DESIGN-SYSTEM.md`）：买家浅色、卖家深色，统一 token / 字阶 / 动效 / 图表配色。
+- 全局 AI 命令面板（⌘K）：导航与自然语言共用一个入口，AI 兜底始终排第一。
+- Agent 运行轨迹组件：步骤状态、工具名、耗时、可折叠。
+- 人工审批门禁卡片：仅 `pending` 可批准/拒绝，高风险工具标红。
+- 卖家页面原语：`SellerPageHeader` / `FlowPanel` / `FlowStat` / `FlowEmpty` / `FlowStatus`。
+- 首页自然语言意图入口：接入真实导购会话，AI 不可用时回退关键词搜索。
+- 管理员创建入口：`npm run admin:create`。
+- 产品路线图（`docs/ROADMAP.md`）。
+- 前端测试基础设施：vitest + jsdom + testing-library，新增 21 个用例（组件行为与纯函数）。
+
+### Changed
+
+- 卖家看板重做为 12 栏布局：今日 AI 简报 + KPI + 趋势/分类图 + 待处理队列；
+  巡检接口失败时显示失败态，不再伪装成「暂无异常」。
+- AI 分析中心改为 Agent 控制台：指标概览与 Agent 名册前置，模型设置后置。
+- 商品管理页改为统一标题区 + sticky 工具栏；订单/退款/优惠券/集合/CMS/审计/运费模板统一页面头。
+- 买家端主色统一为 token（`--flow-ink` / `--flow-accent`），移除页面内硬编码品牌 hex。
+- 侧栏恢复审计日志入口；Copilot 支持 `?c=` / `?q=` 深链；Dashboard 支持「交给副驾」预填。
+
+### Fixed
+
+- 巡检数据 actor 契约错位（`sellerId` vs `userId`）导致的跨卖家告警可见。
+- 命令面板连续 Enter / 双击会重复创建会话并重复发送。
+- 审批卡对已执行动作仍显示批准按钮，导致无效请求。
+- 首页意图参数与商品列表参数不一致（`q` vs `keyword`）。
+- 历史页面在深色工作台下出现浅色块与低对比文字（兼容层映射到 token）。
+
+### Verification
+
+- `npm run type:check`：前后端 0 错误
+- `npm run lint`：0 问题
+- `npm test`：36 文件 / 215 用例全通过（原 34 / 198）
+- `npm run build`：通过
+- `npm audit --omit=dev`：0 漏洞
+- 变异验证：移除 AI 兜底逻辑后 2 个前端用例转红；移除退款数量 clamp 后 1 个后端用例转红
+
+---
+
 ## [1.21.1] — 2026-10-24
 
 仓库统一命名与 CI 全绿。

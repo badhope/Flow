@@ -188,7 +188,7 @@ const SellerLayout: React.FC = () => {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--flow-line-1)] bg-[var(--flow-surface-1)]/80 px-4 backdrop-blur-xl lg:px-6">
+            <header className="flow-dark flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--flow-line-1)] bg-[var(--flow-surface-1)]/80 px-4 backdrop-blur-xl lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
               <SheetTrigger asChild>
@@ -250,7 +250,7 @@ const SellerLayout: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-slate-100 p-4 lg:p-6">
+        <main className="flow-dark flex-1 overflow-y-auto bg-[var(--flow-bg)] p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

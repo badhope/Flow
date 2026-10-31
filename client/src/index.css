@@ -3,5 +3,7 @@
 @import "./tailwind-theme.css";
 @import "./typography.css";
 @import "./flow-design.css";
+@import "./flow-dark-compat.css";
+@import "./flow-store.css";
 
 @config "../../tailwind.config.ts";
