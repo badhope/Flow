@@ -58,10 +58,12 @@ export class AiController {
   @Get('status')
   async getStatus(@Req() req: Request): Promise<AIStatusResponse> {
     const config = await this.aiGateway.resolveConfig(this.getActor(req));
+    const isAuthenticated = Boolean(req.user?.id);
     return {
       configured: config.apiKey.length > 0,
-      model: config.apiKey.length > 0 ? config.model : undefined,
-      source: config.source,
+      // 匿名买家只需要知道导购是否可用；不暴露模型供应商/配置来源。
+      model: isAuthenticated && config.apiKey.length > 0 ? config.model : undefined,
+      source: isAuthenticated ? config.source : undefined,
     };
   }
 

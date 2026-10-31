@@ -146,7 +146,7 @@ try {
   assert(copy.body?.titleEn === 'Mock Title EN', `文案标题应为 Mock Title EN，实际 ${copy.body?.titleEn}`);
   ok('CopywriterAgent：强制 JSON 解析通过');
 
-  const translated = await api('POST', '/api/ai/translate', { json: { text: '你好世界', targetLang: 'th' } });
+  const translated = await api('POST', '/api/ai/translate', { cookie: seller.cookie, json: { text: '你好世界', targetLang: 'th' } });
   assert(translated.body?.translatedText === 'MOCK-TRANSLATED: 你好世界', `翻译结果异常: ${translated.body?.translatedText}`);
   ok('TranslationAgent：目标语言 th 路由通过');
 
@@ -174,12 +174,13 @@ try {
   ok('SupportAgent：回复返回 + 会话落库（卖家咨询管理可回看）');
 
   const usage = await api('GET', `/api/ai/usage-stats?startDate=${encodeURIComponent(startedAt)}`, { cookie: seller.cookie });
-  assert(usage.body?.totalCalls >= 6, `用量统计应 >= 6 次，实际 ${usage.body?.totalCalls}`);
-  assert(usage.body?.successRate === 1, `成功率应为 1，实际 ${usage.body?.successRate}`);
-  for (const agent of ['copywriter', 'translation', 'select', 'trend', 'support']) {
-    assert(usage.body?.byAgent?.some((a) => a.agent === agent), `用量统计缺少 agent: ${agent}`);
+  // 租户隔离后 seller 只能看到自己触发的 4 个 seller Agent；Support 是 buyer 会话，单独按 buyer 统计。
+  assert(usage.body?.totalCalls >= 4, `卖家用量统计应 >= 4 次，实际 ${usage.body?.totalCalls}`);
+  assert(usage.body?.successRate === 1, `卖家成功率应为 1，实际 ${usage.body?.successRate}`);
+  for (const agent of ['copywriter', 'translation', 'select', 'trend']) {
+    assert(usage.body?.byAgent?.some((a) => a.agent === agent), `卖家用量统计缺少 agent: ${agent}`);
   }
-  ok('AI 用量统计：5 个 Agent 全部入账，成功率 100%');
+  ok('AI 用量统计：seller 4 个 Agent 按租户隔离入账（buyer Support 通过会话落库验证）');
 
   // ---------- 自定义 Agent：默认 5 内置 + 自定义 CRUD / 运行 ----------
   const agentsRes = await api('GET', '/api/ai/agents', { cookie: seller.cookie });

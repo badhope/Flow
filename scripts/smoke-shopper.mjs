@@ -155,9 +155,10 @@ try {
 
   // 下单阶段：为这个匿名会话造一笔真实订单，漏斗的 ordered 应变为 1
   await sql`
-    INSERT INTO orders (order_no, status, subtotal, total_amount, payment_method, address_snapshot)
+    INSERT INTO orders (order_no, seller_id, status, subtotal, total_amount, payment_method, address_snapshot)
     VALUES (
       ${'ORDSHOP' + runId.toUpperCase()},
+      ${seller.body.user.id},
       'paid',
       39.90,
       39.90,
@@ -189,12 +190,13 @@ try {
     return res.json();
   })();
   assert(Array.isArray(gaps), '需求缺口接口应返回数组');
-  assert(gaps.some((gap) => gap.keyword === missKeyword), `缺口应包含刚搜的零结果词 ${missKeyword}，实际 ${JSON.stringify(gaps)}`);
+  // 零结果事件没有商品归属，seller 视角必须 fail-closed，不能看到平台级搜索词。
+  assert(!gaps.some((gap) => gap.keyword === missKeyword), `卖家不应看到未归属的全局需求词 ${missKeyword}`);
   assert(gaps.every((gap) => typeof gap.keyword === 'string' && gap.misses > 0), '每条缺口应有关键词与次数');
   if (gaps.length > 1) {
     assert(gaps[0].misses >= gaps[1].misses, '缺口应按搜索次数降序');
   }
-  ok(`需求缺口：${gaps.length} 个零结果关键词`);
+  ok(`需求缺口：seller 仅看到可归属商品的 ${gaps.length} 个零结果关键词`);
 
   // 商品级漏斗：本次加购的商品应出现在"被推荐→加购"里，转化率 100%
   const productFunnel = await (async () => {
