@@ -71,8 +71,9 @@ export class AiController {
     @Query('agent') agent?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Req() req?: Request,
   ): Promise<UsageStatsResponse> {
-    return this.aiGateway.getUsageStats({ agent, startDate, endDate });
+    return this.aiGateway.getUsageStats({ agent, startDate, endDate, actor: this.getActor(req) });
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
@@ -138,8 +139,7 @@ export class AiController {
     @Body() dto: CopywriterDto,
     @Req() req: Request,
   ): Promise<AICopywriterResponse> {
-    const userId = req.user?.id;
-    return this.copywriterService.generate(dto, userId);
+    return this.copywriterService.generate(dto, this.getActor(req));
   }
 
   // 公开端点（买家用）：额外限流收紧到 10/min 每 IP，防止匿名消耗 LLM 配额
@@ -149,8 +149,12 @@ export class AiController {
     @Body() dto: SupportChatDto,
     @Req() req: Request,
   ): Promise<SupportChatResponse> {
-    const userId = req.user?.id;
-    return this.supportService.chat(dto, userId);
+    const rawSession = req.headers['x-session-id'];
+    const sessionId = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+    return this.supportService.chat(dto, {
+      ...this.getActor(req),
+      sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+    });
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
@@ -173,7 +177,6 @@ export class AiController {
     @Body() dto: TranslationDto,
     @Req() req: Request,
   ): Promise<AITranslationResponse> {
-    const userId = req.user?.id;
-    return this.translationService.translate(dto, userId);
+    return this.translationService.translate(dto, this.getActor(req));
   }
 }

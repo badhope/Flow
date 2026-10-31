@@ -1,10 +1,12 @@
 import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { eq, and, gte, lte, count, sum } from 'drizzle-orm';
+import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { isSafePublicHttpUrl } from '../../common/http/url-guard';
 import { aiSettings, aiUsageLog } from '../../database/schema';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
+import type { SellerActor } from './seller-scope';
 import {
   LLM_NOT_CONFIGURED_MESSAGE,
   buildChatCompletionsUrl,
@@ -266,8 +268,13 @@ export class AiGatewayService {
     agent?: string;
     startDate?: string;
     endDate?: string;
+    actor?: SellerActor;
   }): Promise<UsageStats> {
     const conditions = [];
+    const actor = params?.actor;
+    if (actor && !isPlatformAdmin(actor.role)) {
+      conditions.push(actor.userId ? eq(aiUsageLog.userId, actor.userId) : sql`FALSE`);
+    }
     if (params?.agent) {
       conditions.push(eq(aiUsageLog.agent, params.agent));
     }

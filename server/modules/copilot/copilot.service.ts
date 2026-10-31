@@ -126,7 +126,7 @@ export class CopilotService {
   async sendMessage(userId: string, role: string, conversationId: string, input: string): Promise<CopilotSendResult> {
     const conversation = await this.loadConversation(userId, conversationId);
 
-    if (!(await this.gateway.isConfigured())) {
+    if (!(await this.gateway.isConfigured({ userId, role }))) {
       throw new BadRequestException(
         'AI 模型未配置：请先在「AI 分析中心 → 模型设置」填写模型 API，再使用 AI 运营副驾。',
       );
@@ -171,6 +171,7 @@ export class CopilotService {
       const completion = await this.gateway.chat(messages, {
         agent: 'copilot',
         userId,
+        role,
         temperature: 0.2,
         maxTokens: 1200,
         responseFormat: 'json',

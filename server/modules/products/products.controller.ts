@@ -40,7 +40,6 @@ import type {
   ProductListParams,
 } from '../../../shared/api.interface';
 import { ProductsService, type UpdateVariantDto } from './products.service';
-import { evaluatePublishReadiness } from './product-publish-check';
 
 const PRODUCT_SORT_BY = ['price_asc', 'price_desc', 'sold_desc', 'newest'] as const;
 const PRODUCT_STATUS = ['draft', 'active', 'inactive'] as const;
@@ -355,8 +354,11 @@ export class ProductsController {
   // ==================== Variants (SPU -> SKU) ====================
 
   @Get(':id/variants')
-  async listVariants(@Param('id') id: string) {
-    return this.productsService.listVariants(id);
+  async listVariants(@Req() req: Request, @Param('id') id: string) {
+    const actor = req.user && ['seller', 'admin'].includes(req.user.role)
+      ? { userId: req.user.id, role: req.user.role }
+      : undefined;
+    return this.productsService.listVariants(id, actor);
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
@@ -396,23 +398,33 @@ export class ProductsController {
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('audit/active')
-  async auditActive(@Query('limit') limit?: string) {
+  async auditActive(@Req() req: Request, @Query('limit') limit?: string) {
     const parsed = limit ? parseInt(limit, 10) : 200;
-    return this.productsService.auditActiveProducts(Number.isFinite(parsed) ? parsed : 200);
+    return this.productsService.auditActiveProducts(
+      Number.isFinite(parsed) ? parsed : 200,
+      { userId: req.user?.id, role: req.user?.role },
+    );
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get(':id/publish-readiness')
-  async getPublishReadiness(@Param('id') id: string) {
-    const product = await this.productsService.findOne(id, { includeUnpublished: true });
-    return evaluatePublishReadiness(product);
+  async getPublishReadiness(@Req() req: Request, @Param('id') id: string) {
+    return this.productsService.getPublishReadiness(id, {
+      userId: req.user?.id,
+      role: req.user?.role,
+    });
   }
 
   @Get(':id')
   async findOne(@Req() req: Request, @Param('id') id: string): Promise<Product> {
     // 卖家读草稿仅限本店商品；买家/游客只能读上架商品
-    const isSeller = !!req.user && ['seller', 'admin'].includes(req.user.role);
-    const product = await this.productsService.findOne(id, { includeUnpublished: isSeller });
+    const actor = req.user && ['seller', 'admin'].includes(req.user.role)
+      ? { userId: req.user.id, role: req.user.role }
+      : undefined;
+    const product = await this.productsService.findOne(id, {
+      includeUnpublished: Boolean(actor),
+      actor,
+    });
     if (
       product.status !== 'active'
       && req.user?.role === 'seller'

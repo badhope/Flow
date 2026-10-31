@@ -20,9 +20,22 @@ function restoreLlmEnv(): void {
   }
 }
 
-function makeGateway(rows: Array<{ key: string; value: string }>): AiGatewayService {
+function makeGateway(rows: Array<{ key: string; value: string }>, querySpy?: (condition: unknown) => void): AiGatewayService {
   const db = {
-    select: () => ({ from: async () => rows }),
+    select: () => ({
+      from: () => ({
+        where: (condition: unknown) => {
+          querySpy?.(condition);
+          return {
+            groupBy: () => ({
+              orderBy: async () => rows,
+            }),
+            then: (resolve: (value: unknown[]) => void) => resolve(rows),
+          };
+        },
+        then: (resolve: (value: unknown[]) => void) => resolve(rows),
+      }),
+    }),
     insert: () => ({ values: async () => undefined }),
   } as never;
   const http = { post: () => { throw new Error('HTTP 不应被调用'); } } as never;
@@ -62,5 +75,23 @@ describe('AiGatewayService 诚实拒绝', () => {
     const config = await gateway.resolveConfig();
     expect(config.source).toBe('env');
     expect(config.model).toBe('deepseek-chat');
+  });
+});
+
+
+describe('AiGatewayService usage tenant scope', () => {
+  it('R30: seller usage stats query includes actor userId, admin query stays global', async () => {
+    const sellerConditions: unknown[] = [];
+    const sellerGateway = makeGateway([], (condition) => sellerConditions.push(condition));
+    await sellerGateway.getUsageStats({ actor: { userId: 'seller-1', role: 'seller' } });
+    expect(sellerConditions).toHaveLength(3);
+
+    const adminConditions: unknown[] = [];
+    const adminGateway = makeGateway([], (condition) => adminConditions.push(condition));
+    await adminGateway.getUsageStats({ actor: { userId: 'admin-1', role: 'admin' } });
+    expect(adminConditions).toHaveLength(3);
+    expect(adminConditions[0]).toBeUndefined();
+    expect(adminConditions[1]).toBeDefined();
+    expect(adminConditions[2]).toBeUndefined();
   });
 });

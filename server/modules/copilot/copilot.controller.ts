@@ -181,11 +181,12 @@ export class CopilotController {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays = Number.isFinite(parsed) ? Math.min(365, Math.max(1, parsed)) : 30;
     const actor = this.getActor(req);
-    return this.shopperAnalytics.getFunnel(safeDays, actor.role === 'admin' ? undefined : actor.userId);
+    return this.shopperAnalytics.getFunnel(safeDays, actor);
   }
 
   @Get('shopper-demand-gaps')
   async getShopperDemandGaps(
+    @Req() req: Request,
     @Query('days') days?: string,
     @Query('limit') limit?: string,
   ): Promise<ShopperDemandGap[]> {
@@ -194,6 +195,7 @@ export class CopilotController {
     return this.shopperAnalytics.getDemandGaps(
       Number.isFinite(parsedDays) ? parsedDays : 90,
       Number.isFinite(parsedLimit) ? parsedLimit : 10,
+      this.getActor(req),
     );
   }
 
@@ -266,7 +268,7 @@ export class CopilotController {
         productNameZh: input.productNameZh,
         category: input.category,
         targetMarket: '北美市场',
-      }, actor.userId),
+      }, actor),
     );
   }
 
@@ -285,15 +287,18 @@ export class CopilotController {
   }
 
   @Get('products/copy-quality')
-  async auditAiCopy(@Query('limit') limit?: string) {
+  async auditAiCopy(@Req() req: Request, @Query('limit') limit?: string) {
     const parsed = limit ? parseInt(limit, 10) : 100;
-    return this.productsService.auditAiCopy(Number.isFinite(parsed) ? parsed : 100);
+    return this.productsService.auditAiCopy(
+      Number.isFinite(parsed) ? parsed : 100,
+      this.getActor(req),
+    );
   }
 
   @Post('products/:id/mark-reviewed')
   async markReviewed(@Req() req: Request, @Param('id') id: string) {
     const actor = this.getActor(req);
-    return this.productsService.markCopyReviewed(id, actor.userId);
+    return this.productsService.markCopyReviewed(id, actor);
   }
 
   @Get('shopper-product-funnel')
@@ -308,7 +313,7 @@ export class CopilotController {
     return this.shopperAnalytics.getProductFunnel(
       Number.isFinite(parsedDays) ? parsedDays : 30,
       Number.isFinite(parsedLimit) ? parsedLimit : 20,
-      actor.role === 'admin' ? undefined : actor.userId,
+      actor,
     );
   }
 

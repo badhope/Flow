@@ -19,7 +19,6 @@ export class SelectService {
     // 未配置模型时必须走完整链路：gateway.chat 会如实落 ai_usage_log(success=false)
     // 再抛 400（诚实降级 + 可观测），绝不静默返回空数组冒充「无推荐」。
     const configured = await this.aiGateway.isConfigured({ userId: actor.userId, role: actor.role });
-    const sellerId = actor.userId;
     const allCategories = await this.db.select({
       id: categories.id,
       nameZh: categories.nameZh,
@@ -32,7 +31,7 @@ export class SelectService {
       .from(products)
       .where(andOptional(
         eq(products.status, 'active'),
-        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+        buildSellerScopeCondition(products.sellerId, actor),
       ));
     const scopedIds = sellerProductIds.map((row) => row.id);
 
@@ -85,7 +84,7 @@ export class SelectService {
     const systemPrompt = '你是专业的跨境电商选品专家，擅长基于销售数据和市场趋势给出选品建议。请用中文输出严格的 JSON 格式。';
 
     // 真实需求信号：买家在导购里搜了但店里没有的词（查不到就静默降级，不影响选品）
-    const demandGapSection = await this.buildDemandGapSection();
+    const demandGapSection = await this.buildDemandGapSection(actor);
 
     const userPrompt = `基于以下店铺现有类目和销售数据，推荐 5-8 个值得上架的细分品。
 
@@ -116,7 +115,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId: actor.userId },
+      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId: actor.userId, role: actor.role },
     );
 
     const parsed = parseLlmJson<AISelectResponse>(content);
@@ -126,7 +125,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
   }
 
   /** 近 90 天导购零结果搜索 → 提示词段落；无数据/查询失败时返回空串 */
-  private async buildDemandGapSection(): Promise<string> {
+  private async buildDemandGapSection(actor: SellerActor): Promise<string> {
     try {
       const since = new Date(Date.now() - 90 * 24 * 3600 * 1000);
       const rows = await this.db
@@ -141,6 +140,11 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
           gte(shopperEvents.createdAt, since),
           sql`${shopperEvents.keyword} IS NOT NULL`,
           sql`${shopperEvents.keyword} <> ''`,
+          ...(actor.role === 'admin'
+            ? []
+            : [actor.userId
+              ? sql`${shopperEvents.productId} IN (SELECT id FROM ${products} WHERE seller_id = ${actor.userId})`
+              : sql`FALSE`]),
         ))
         .groupBy(shopperEvents.keyword)
         .orderBy(sql`COUNT(*) DESC`)

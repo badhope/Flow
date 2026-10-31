@@ -262,7 +262,7 @@ export class RefundsService {
     actorRole?: string,
   ) {
     const refund = await this.loadRefund(refundId);
-    this.assertSellerOwnsRefund(refund, sellerId, actorRole);
+    await this.assertSellerOwnsRefund(refund, sellerId, actorRole);
 
     if (refund.status !== 'requested') {
       throw new BadRequestException('仅待处理退款可审批');
@@ -496,7 +496,7 @@ export class RefundsService {
     actorRole?: string,
   ) {
     const refund = await this.loadRefund(refundId);
-    this.assertSellerOwnsRefund(refund, sellerId, actorRole);
+    await this.assertSellerOwnsRefund(refund, sellerId, actorRole);
 
     if (refund.status !== 'requested') {
       throw new BadRequestException('仅待处理退款可拒绝');

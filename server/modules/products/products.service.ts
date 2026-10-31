@@ -15,10 +15,16 @@ import { evaluateCopyQuality, type CopyQualityReport } from './copy-quality';
 import { planProductQuery } from './product-visibility';
 import { buildPriceRangeCondition, normalizeSortBy, priceOrderExpression } from './product-query';
 import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
+import type { SellerActor } from '../ai/seller-scope';
 import Papa from 'papaparse';
 
 export interface ImportFailure { row: number; reason: string; }
 export interface ImportResult { successCount: number; failCount: number; failures: ImportFailure[]; }
+
+function buildProductOwnerCondition(actor?: SellerActor): SQL | undefined {
+  if (isPlatformAdmin(actor?.role)) return undefined;
+  return actor?.userId ? eq(products.sellerId, actor.userId) : sql`FALSE`;
+}
 
 interface ParsedCsvRow {
   nameZh: string; nameEn: string; category: string; price: string;
@@ -72,8 +78,11 @@ export class ProductsService {
     };
   }
 
-  private async toDto(row: ProductWithCategory): Promise<Product> {
-    const variants = await this.listVariants(row.id);
+  private async toDto(
+    row: ProductWithCategory,
+    options?: { onlyActiveVariants?: boolean },
+  ): Promise<Product> {
+    const variants = await this.fetchVariantsForProduct(row.id, options?.onlyActiveVariants === true);
     const activeVariants = variants.filter((v) => v.status === 'active');
     const prices = activeVariants.map((v) => Number(v.price));
     const minPrice = prices.length > 0 ? Math.min(...prices).toString() : '0';
@@ -136,10 +145,26 @@ export class ProductsService {
 
   // ── Variant query ────────────────────────────
 
-  private async fetchVariantsForProducts(productIds: string[]): Promise<Map<string, ProductVariant[]>> {
+  private async fetchVariantsForProduct(productId: string, onlyActive = false): Promise<ProductVariant[]> {
+    const conditions: SQL[] = [eq(productVariants.productId, productId)];
+    if (onlyActive) conditions.push(eq(productVariants.status, 'active'));
+    const rows = await this.db
+      .select()
+      .from(productVariants)
+      .where(and(...conditions))
+      .orderBy(asc(productVariants.createdAt));
+    return rows.map((variant) => this.variantToDto(variant));
+  }
+
+  private async fetchVariantsForProducts(
+    productIds: string[],
+    onlyActive = false,
+  ): Promise<Map<string, ProductVariant[]>> {
     if (productIds.length === 0) return new Map();
+    const conditions: SQL[] = [inArray(productVariants.productId, productIds)];
+    if (onlyActive) conditions.push(eq(productVariants.status, 'active'));
     const rows = await this.db.select().from(productVariants)
-      .where(inArray(productVariants.productId, productIds))
+      .where(and(...conditions))
       .orderBy(asc(productVariants.createdAt));
     const map = new Map<string, ProductVariant[]>();
     for (const v of rows) {
@@ -179,7 +204,14 @@ export class ProductsService {
 
     const total = Number(countResult[0]?.count ?? 0);
     const productRows = rows as unknown as ProductWithCategory[];
-    const variantsMap = await this.fetchVariantsForProducts(productRows.map((r: any) => r.id));
+    const privateList = params.scope === 'mine'
+      && (scope?.role === 'admin'
+        || (scope?.role === 'seller' && Boolean(scope.sellerId)));
+    const publicList = !privateList;
+    const variantsMap = await this.fetchVariantsForProducts(
+      productRows.map((r: any) => r.id),
+      publicList,
+    );
 
     const items = productRows.map((row) => {
       const variants = variantsMap.get(row.id) ?? [];
@@ -214,7 +246,10 @@ export class ProductsService {
    * 商品详情。默认只返回上架商品（公开接口防草稿泄露）；
    * 卖家工作台与内部服务显式传 includeUnpublished。
    */
-  async findOne(id: string, options?: { includeUnpublished?: boolean }): Promise<Product> {
+  async findOne(
+    id: string,
+    options?: { includeUnpublished?: boolean; actor?: SellerActor },
+  ): Promise<Product> {
     const rows = await this.db.select({
       ...(products as any),
       categoryNameZh: categories.nameZh,
@@ -224,11 +259,20 @@ export class ProductsService {
       .where(eq(products.id, id)).limit(1);
 
     if (rows.length === 0) throw new NotFoundException('商品不存在');
-    if (!options?.includeUnpublished && (rows[0] as unknown as { status: string }).status !== 'active') {
+    const row = rows[0] as unknown as ProductWithCategory;
+    let includeUnpublished = options?.includeUnpublished === true;
+    const privateActor = options?.actor && ['seller', 'admin'].includes(options.actor.role ?? '');
+    if (includeUnpublished && privateActor && options.actor?.role !== 'admin' && row.sellerId !== options.actor?.userId) {
+      if (row.status !== 'active') throw new ForbiddenException('无权查看该商品');
+      includeUnpublished = false;
+    }
+    if (!includeUnpublished && row.status !== 'active') {
       throw new NotFoundException('商品不存在');
     }
 
-    const result = await this.toDto(rows[0] as unknown as ProductWithCategory);
+    const result = await this.toDto(row, {
+      onlyActiveVariants: !includeUnpublished,
+    });
 
     const reviewStats = await this.db.select({
       avgRating: sql<number>`round(avg(${reviews.rating})::numeric, 1)`,
@@ -262,7 +306,10 @@ export class ProductsService {
 
     const productRows = (rows as unknown as ProductWithCategory[])
       .filter((row) => !onlyActive || row.status === 'active');
-    const variantsMap = await this.fetchVariantsForProducts(productRows.map((row) => row.id));
+    const variantsMap = await this.fetchVariantsForProducts(
+      productRows.map((row) => row.id),
+      onlyActive,
+    );
 
     const byId = new Map(productRows.map((row) => [row.id, row]));
     const ordered = ids.map((id) => byId.get(id)).filter((row): row is ProductWithCategory => Boolean(row));
@@ -305,7 +352,10 @@ export class ProductsService {
       .orderBy(desc(products.totalSold), desc(products.createdAt)).limit(8);
 
     const productRows = rows as unknown as ProductWithCategory[];
-    const variantsMap = await this.fetchVariantsForProducts(productRows.map((r: any) => r.id));
+    const variantsMap = await this.fetchVariantsForProducts(
+      productRows.map((r: any) => r.id),
+      true,
+    );
 
     return productRows.map((row) => {
       const variants = variantsMap.get(row.id) ?? [];
@@ -550,7 +600,10 @@ export class ProductsService {
    * 批量上架体检：扫描已有 active 商品（历史遗留可能不完整），
    * 返回不合规商品与缺失项。只读，不自动改状态——由卖家决定下架或补齐。
    */
-  async auditActiveProducts(limit = 200): Promise<Array<{
+  async auditActiveProducts(
+    limit = 200,
+    actor?: SellerActor,
+  ): Promise<Array<{
     id: string;
     title: string;
     missing: string[];
@@ -558,7 +611,10 @@ export class ProductsService {
     const rows = await this.db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.status, 'active'))
+      .where(and(
+        eq(products.status, 'active'),
+        buildProductOwnerCondition(actor),
+      ))
       .orderBy(desc(products.createdAt))
       .limit(Math.max(1, Math.min(1000, Math.round(limit))));
 
@@ -598,6 +654,7 @@ export class ProductsService {
 
     for (const id of targets) {
       try {
+        await this.assertProductOwner(id, actor);
         const product = await this.findOne(id, { includeUnpublished: true });
         const filled: string[] = [];
 
@@ -652,7 +709,10 @@ export class ProductsService {
   }
 
   /** AI 文案质量抽检：对 copy_source=ai 的商品做启发式评估 */
-  async auditAiCopy(limit = 100): Promise<{
+  async auditAiCopy(
+    limit = 100,
+    actor?: SellerActor,
+  ): Promise<{
     total: number;
     needsReview: number;
     averageScore: number;
@@ -661,7 +721,10 @@ export class ProductsService {
     const rows = await this.db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.copySource, 'ai'))
+      .where(and(
+        eq(products.copySource, 'ai'),
+        buildProductOwnerCondition(actor),
+      ))
       .orderBy(desc(products.updatedAt))
       .limit(Math.max(1, Math.min(500, Math.round(limit))));
 
@@ -679,12 +742,17 @@ export class ProductsService {
   }
 
   /** 人工复核通过：copy_source ai → reviewed */
-  async markCopyReviewed(id: string, actorId: string): Promise<{ id: string }> {
-    const rows = await this.db.select({ id: products.id }).from(products).where(eq(products.id, id));
-    if (rows.length === 0) throw new NotFoundException('商品不存在');
+  async markCopyReviewed(
+    id: string,
+    actorOrId: SellerActor | string,
+  ): Promise<{ id: string }> {
+    const actor: SellerActor = typeof actorOrId === 'string'
+      ? { userId: actorOrId, role: 'seller' }
+      : actorOrId;
+    await this.assertProductOwner(id, actor);
     await this.db
       .update(products)
-      .set({ copySource: 'reviewed', updatedAt: new Date(), updatedBy: actorId })
+      .set({ copySource: 'reviewed', updatedAt: new Date(), updatedBy: actor.userId })
       .where(eq(products.id, id));
     return { id };
   }
@@ -709,15 +777,18 @@ export class ProductsService {
 
   private async assertProductOwner(
     productId: string,
-    actor?: { userId?: string; role?: string },
+    actor?: SellerActor,
   ): Promise<void> {
-    if (!actor || isPlatformAdmin(actor.role)) return;
+    if (!actor || (!isPlatformAdmin(actor.role) && !actor.userId)) {
+      throw new ForbiddenException('无权访问该商品');
+    }
     const rows = await this.db
       .select({ sellerId: products.sellerId })
       .from(products)
       .where(eq(products.id, productId))
       .limit(1);
     if (rows.length === 0) throw new NotFoundException('商品不存在');
+    if (isPlatformAdmin(actor.role)) return;
     if (rows[0].sellerId !== actor.userId) throw new ForbiddenException('无权修改该商品');
   }
 
@@ -811,11 +882,23 @@ export class ProductsService {
     return { id: variantId };
   }
 
-  async listVariants(productId: string): Promise<ProductVariant[]> {
-    const variantRows = await this.db.select().from(productVariants)
-      .where(eq(productVariants.productId, productId))
-      .orderBy(asc(productVariants.createdAt));
-    return variantRows.map((v) => this.variantToDto(v));
+  async listVariants(productId: string, actor?: SellerActor): Promise<ProductVariant[]> {
+    const productRows = await this.db
+      .select({ id: products.id, sellerId: products.sellerId, status: products.status })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    if (productRows.length === 0) throw new NotFoundException('商品不存在');
+
+    const product = productRows[0];
+    const privateActor = actor && ['seller', 'admin'].includes(actor.role ?? '');
+    if (privateActor) {
+      await this.assertProductOwner(productId, actor);
+    } else if (product.status !== 'active') {
+      throw new NotFoundException('商品不存在');
+    }
+
+    return this.fetchVariantsForProduct(productId, !privateActor);
   }
 
   async getVariant(variantId: string): Promise<ProductVariant & { product?: Product }> {
@@ -837,6 +920,12 @@ export class ProductsService {
         titleEn: row.productTitleEn, status: row.productStatus,
       } as any,
     };
+  }
+
+  async getPublishReadiness(id: string, actor?: SellerActor) {
+    await this.assertProductOwner(id, actor);
+    const product = await this.findOne(id, { includeUnpublished: true });
+    return evaluatePublishReadiness(product);
   }
 
   // ── Stock management ─────────────────────────

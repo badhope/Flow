@@ -16,10 +16,9 @@ export class TrendService {
   ) {}
 
   async generateTrendReport(actor: SellerActor): Promise<AITrendReport> {
-    const sellerId = actor.userId;
-    const salesData = await this.getSalesData(sellerId);
-    const categorySales = await this.getCategorySales(sellerId);
-    const topProducts = await this.getTopProducts(sellerId);
+    const salesData = await this.getSalesData(actor);
+    const categorySales = await this.getCategorySales(actor);
+    const topProducts = await this.getTopProducts(actor);
     const allCategories = await this.db.select({
       id: categories.id,
       nameZh: categories.nameZh,
@@ -57,11 +56,11 @@ ${dataContext}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId: actor.userId },
+      { temperature: 0.7, maxTokens: 3000, agent: 'trend', userId: actor.userId, role: actor.role },
     );
 
     // 落库：报告可在「AI 分析中心 → 历史报告」回看（docs 承诺的真实实现）
-    const model = await this.aiGateway.getModel({ userId: actor.userId });
+    const model = await this.aiGateway.getModel({ userId: actor.userId, role: actor.role });
     const inserted = await this.db
       .insert(aiReports)
       .values({
@@ -83,7 +82,7 @@ ${dataContext}
     };
   }
 
-  private async getSalesData(sellerId?: string): Promise<Array<{ date: string; amount: number; orders: number }>> {
+  private async getSalesData(actor: SellerActor): Promise<Array<{ date: string; amount: number; orders: number }>> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -98,7 +97,7 @@ ${dataContext}
       .where(andOptional(
         gte(orders.createdAt, thirtyDaysAgo),
         eq(orders.status, 'delivered'),
-        buildSellerScopeCondition(orders.sellerId, { userId: sellerId }),
+        buildSellerScopeCondition(orders.sellerId, actor),
       ))
       .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM-DD')`);
@@ -110,7 +109,7 @@ ${dataContext}
     }));
   }
 
-  private async getCategorySales(sellerId?: string): Promise<Array<{ categoryName: string; amount: number }>> {
+  private async getCategorySales(actor: SellerActor): Promise<Array<{ categoryName: string; amount: number }>> {
     const rows = await this.db
       .select({
         categoryName: categories.nameEn,
@@ -122,7 +121,7 @@ ${dataContext}
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
       .where(andOptional(
         eq(orders.status, 'delivered'),
-        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+        buildSellerScopeCondition(products.sellerId, actor),
       ))
       .groupBy(categories.nameEn)
       .orderBy(desc(sum(orderItems.subtotal)));
@@ -133,7 +132,7 @@ ${dataContext}
     }));
   }
 
-  private async getTopProducts(sellerId?: string): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
+  private async getTopProducts(actor: SellerActor): Promise<Array<{ id: string; titleEn: string; sold: number; price: string }>> {
     // Aggregate from productVariants: SUM(variants.sold) per product, MIN(price) for display
     const rows = await this.db
       .select({
@@ -150,7 +149,7 @@ ${dataContext}
       ))
       .where(andOptional(
         eq(products.status, 'active'),
-        buildSellerScopeCondition(products.sellerId, { userId: sellerId }),
+        buildSellerScopeCondition(products.sellerId, actor),
       ))
       .groupBy(products.id, products.titleEn)
       .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))

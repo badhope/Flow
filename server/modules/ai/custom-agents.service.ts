@@ -160,6 +160,7 @@ export class CustomAgentsService {
         responseFormat: agent.responseFormat === 'json' ? 'json' : 'text',
         agent: `custom:${agent.slug}`,
         userId: actorId,
+        role: actor.role,
       },
     );
 
