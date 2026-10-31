@@ -67,7 +67,10 @@ export class InquiryController {
         throw new ForbiddenException('无权访问该会话');
       }
     }
-    return this.inquiryService.getMessages(sessionId);
+    return this.inquiryService.getMessages(
+      sessionId,
+      isSeller ? { sellerId: req.user?.id, role: req.user?.role } : undefined,
+    );
   }
 
   @Post('messages')

@@ -76,7 +76,16 @@ export class InquiryService {
     return { items, total, page, pageSize };
   }
 
-  async getMessages(sessionId: string): Promise<InquiryMessage[]> {
+  async getMessages(sessionId: string, actor?: { sellerId?: string; role?: string }): Promise<InquiryMessage[]> {
+    const sessionRows = await this.db
+      .select({ sellerId: inquirySessions.sellerId })
+      .from(inquirySessions)
+      .where(eq(inquirySessions.sessionId, sessionId))
+      .limit(1);
+    if (sessionRows.length === 0) return [];
+    if (actor?.role !== 'admin' && actor?.sellerId && sessionRows[0].sellerId && sessionRows[0].sellerId !== actor.sellerId) {
+      return [];
+    }
     const rows = await this.db
       .select()
       .from(inquiryMessages)
