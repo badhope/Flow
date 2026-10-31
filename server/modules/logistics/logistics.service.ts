@@ -3,6 +3,8 @@ import { DRIZZLE_DATABASE, type Database } from '../../database/database.provide
 import { eq, and, desc } from 'drizzle-orm';
 import { logistics, orders, orderFulfillments } from '../../database/schema';
 import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
+import { registerTrackings, fetchTrackInfo } from './seventeen-client';
+import { mapSeventeenResponse } from './seventeen-mapping';
 
 export interface TrackingEvent {
   time: string;
@@ -29,14 +31,26 @@ export interface TrackingInfo {
 export class LogisticsService {
   private readonly logger = new Logger(LogisticsService.name);
   private readonly apiKey: string;
-  private readonly isDemoMode: boolean;
 
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {
     this.apiKey = process.env['17TRACK_API_KEY'] || '';
-    // 诚实标注（v1.21.1 修正）：当前版本 17TRACK 未实现真实 HTTP 查询，
-    // getTrackingInfo 恒走 generateDemoTimeline；isDemo 恒为 true，
-    // 前端「演示物流」水印恒显示。配置 Key 仅预留，不改变行为（真实接入见 Roadmap）。
-    this.isDemoMode = true;
+  }
+
+  /** 是否有真实轨迹可用（配置了 Key 即接入；查询失败时单次降级，不改全局状态） */
+  private get hasRealTracking(): boolean {
+    return this.apiKey.length > 0;
+  }
+
+  /**
+   * 注册运单到 17TRACK（尽力而为，不阻断发货主流程）。
+   * 注册失败的运单不会出现在 gettrackinfo 里，查询端会自动回退演示时间线。
+   */
+  private registerToSeventeen(trackingNumber: string, carrier: string): void {
+    void registerTrackings(this.apiKey, [{ number: trackingNumber }]).catch((err: unknown) => {
+      this.logger.warn(
+        `17TRACK 注册失败（运单 ${trackingNumber}）：${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   async registerTracking(
@@ -45,14 +59,12 @@ export class LogisticsService {
     trackingNumber: string,
     trackingUrl?: string,
   ): Promise<{ success: boolean; isDemo: boolean; fulfillmentId: string }> {
-    if (this.isDemoMode) {
-      const fulfillmentId = await this.upsertFulfillmentAndShipOrder(orderId, carrier, trackingNumber, trackingUrl);
-      return { success: true, isDemo: true, fulfillmentId };
-    }
-
     try {
       const fulfillmentId = await this.upsertFulfillmentAndShipOrder(orderId, carrier, trackingNumber, trackingUrl);
-      return { success: true, isDemo: false, fulfillmentId };
+      if (this.hasRealTracking) {
+        this.registerToSeventeen(trackingNumber, carrier);
+      }
+      return { success: true, isDemo: !this.hasRealTracking, fulfillmentId };
     } catch (error) {
       this.logger.error('注册运单失败', error);
       throw error;
@@ -200,7 +212,23 @@ export class LogisticsService {
     const primaryCarrier = fulfillments.length > 0 ? fulfillments[0].carrier : (logisticsRecord[0]?.carrier ?? null);
     const primaryTracking = fulfillments.length > 0 ? fulfillments[0].trackingNumber : (logisticsRecord[0]?.trackingNumber ?? null);
 
-    const events = this.generateDemoTimeline(order);
+    // 真实轨迹优先：配置了 Key 且运单已注册时查 17TRACK；任何失败回退演示时间线（不抛错）
+    let events = this.generateDemoTimeline(order);
+    let isDemo = true;
+    if (this.hasRealTracking && primaryTracking) {
+      try {
+        const res = await fetchTrackInfo(this.apiKey, [primaryTracking]);
+        const mapped = mapSeventeenResponse(res);
+        if (!mapped.demo) {
+          events = mapped.events;
+          isDemo = false;
+        }
+      } catch (err: unknown) {
+        this.logger.warn(
+          `17TRACK 查询失败（运单 ${primaryTracking}），回退演示时间线：${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
 
     return {
       events,
@@ -213,7 +241,7 @@ export class LogisticsService {
         status: f.status,
         shippedAt: f.shippedAt?.toISOString() ?? null,
       })),
-      isDemo: this.isDemoMode,
+      isDemo,
     };
   }
 

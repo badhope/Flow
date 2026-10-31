@@ -39,7 +39,7 @@
 | `PAYPAL_MODE` | 沙箱/正式 | `sandbox` 或 `live` |
 | `GOOGLE_CLIENT_ID` | Google 登录 | Google Cloud Console → OAuth 同意屏 → 凭据 |
 | `GOOGLE_CLIENT_SECRET` | Google 登录 | 同上 |
-| `17TRACK_API_KEY` | 预留（当前版本未实现真实查询，物流恒为演示时间线） | 真实轨迹接入在 Roadmap，配置后暂不改变行为 |
+| `17TRACK_API_KEY` | 真实物流轨迹 | 17TRACK 开放平台申请；发货自动注册运单，查询失败自动回退演示时间线 |
 | `DATABASE_URL` | 数据库连接 | 见 docker-compose 默认值，按需修改 |
 | `CORS_ORIGINS` | 允许的前端域名（逗号分隔；生产未设置时回退 `APP_URL`） | 如 `https://your-shop.com` |
 | `TRUST_PROXY` | 反向代理后还原真实客户端 IP | nginx/caddy 后部署设为 `1`（否则审计与限流拿到代理 IP） |
