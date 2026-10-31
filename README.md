@@ -8,16 +8,16 @@
 
 **从开店、上架、获客、成交、客服到复盘，全链路都在这里。**
 
-[![Version](https://img.shields.io/badge/version-v1.21.1-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.22.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-166%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-248%20passing-10b981?style=flat-square)](server)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
-[**90 秒演示视频**](docs/video/demo.mp4) · [**产品截图**](docs/screenshots) · [**架构说明**](docs/ARCHITECTURE.md) · [**部署指南**](docs/DEPLOY.md) · [**OpenAPI**](/api/openapi.json)
+[**约 70 秒演示视频**](docs/video/demo.mp4) · [**产品截图**](docs/screenshots) · [**架构说明**](docs/ARCHITECTURE.md) · [**部署指南**](docs/DEPLOY.md) · [**OpenAPI 端点说明**](docs/DEPLOY.md#九seo-与机器可读端点)
 
 **镜像 · Mirrors**：[GitHub](https://github.com/X33834/Flow) · [Gitee](https://gitee.com/badhope/Flow) · [GitCode](https://gitcode.com/badhope/Flow)
 
@@ -194,7 +194,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 | 维度 | 现状 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` 契约 |
-| 测试 | **166 个单元测试**（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
+| 测试 | **248 个测试用例**（37 个测试文件）（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
 | E2E | **6 套全链路冒烟**：业务工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | CI | GitHub Actions：lint → typecheck → test+coverage → build → Postgres E2E |
 | 安全 | HttpOnly Cookie JWT、CSRF 头校验、按端点限流、Stripe/PayPal 验签、租户隔离、SSRF/重放防护 |
@@ -240,7 +240,7 @@ npm run build         # 生产构建
 
 ## 对标与设计取舍
 
-Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
+Flow 的定位是「AI 原生跨境出口电商」：买家用自然语言发现商品，卖家用可审计的 Agent 处理运营工作；技术上保持 REST + 单体部署，优先保证交易正确性与租户隔离。
 
 | 参照 | 借鉴了什么 | 为什么没有照搬 |
 |---|---|---|
@@ -260,7 +260,7 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构、数据库表、AI 网关、Copilot 协议、安全模型 |
 | [docs/AI-AGENTS.md](docs/AI-AGENTS.md) | 5 个 Agent、自定义 Agent、Copilot 工具与降级行为 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 部署、密钥清单、备份升级、排障 |
-| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | v1.21.1 发布说明、升级注意与已知边界 |
+| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | v1.22.0 发布说明、升级注意与已知边界 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程与代码规范 |
 | [SECURITY.md](SECURITY.md) | 安全策略与漏洞报告 |
@@ -271,7 +271,7 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 
 | 状态 | 内容 |
 |---|---|
-| ✅ v1.21 | 租户隔离加固、支付/退款幂等、SEO 注入、OpenAPI、CLI、批量运营、多语言与可访问性；v1.21.1 统一仓库名与 CI 全绿 |
+| ✅ v1.21 | 租户隔离加固、支付/退款幂等、SEO 注入、OpenAPI、CLI、批量运营、多语言与可访问性；v1.22.0 完成 AI 原生界面、安全边界与 17TRACK 接入 |
 | 🔜 下一阶段 | Region/多币种与税费、facets 聚合搜索、异步导出中心、MCP 只读服务端、事件总线与签名 webhook |
 | 💡 探索 | 多店铺 SaaS、插件体系、按成交抽佣 |
 
@@ -281,10 +281,10 @@ Flow 的定位是「AI 原生跨境出口电商」，对标开源 commerce 平
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | **v1.21.1** |
+| 当前版本 | **v1.22.0** |
 | 开发状态 | ✅ 功能闭环，维护模式（bug fix / 安全修复 / 小版本依赖升级） |
 | CI | GitHub Actions：lint / typecheck / test / build + 6 套 E2E，三仓全绿 |
-| 单元测试 | 166 / 166（29 文件） |
+| 单元测试 | 248 / 248（37 文件） |
 | 许可 | MIT |
 
 **为什么进入维护模式**：核心闭环（商城 + 卖家后台 + AI Agent + 副驾 + 支付退款 + SEO/OpenAPI）已完整交付并有 E2E 覆盖；

@@ -12,6 +12,8 @@ describe('url-guard R9: 出站 URL 防 SSRF', () => {
     expect(isSafePublicHttpUrl('http://127.0.0.1:4880/stripe')).toBe(false);
     expect(isSafePublicHttpUrl('http://localhost/hook')).toBe(false);
     expect(isSafePublicHttpUrl('http://[::1]/hook')).toBe(false);
+    expect(isSafePublicHttpUrl('http://[::ffff:7f00:1]/hook')).toBe(false);
+    expect(isSafePublicHttpUrl('http://[::ffff:10.0.0.1]/hook')).toBe(false);
     expect(isSafePublicHttpUrl('http://0.0.0.0/hook')).toBe(false);
   });
 

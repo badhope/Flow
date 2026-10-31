@@ -49,6 +49,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
+
       - name: Build (server + client)
         run: npm run build
 

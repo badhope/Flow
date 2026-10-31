@@ -201,7 +201,11 @@ export class CopilotController {
 
   @Get('watch')
   async getWatchSettings(@Req() req: Request): Promise<WatchSettings> {
-    return this.watchService.getSettings(this.getActor(req));
+    const settings = await this.watchService.getSettings(this.getActor(req));
+    return {
+      ...settings,
+      notifySmtp: settings.notifySmtp ? { ...settings.notifySmtp, pass: undefined } : undefined,
+    };
   }
 
   @Put('watch')
@@ -218,11 +222,24 @@ export class CopilotController {
       action: 'copilot.watch_update',
       entity: 'ai_settings',
       entityId: 'copilot_watch_settings',
-      after: { ...updated },
+      after: {
+        enabled: updated.enabled,
+        intervalMinutes: updated.intervalMinutes,
+        notifyKind: updated.notifyKind,
+        notifySmtp: updated.notifySmtp
+          ? { host: updated.notifySmtp.host, port: updated.notifySmtp.port, from: updated.notifySmtp.from, to: updated.notifySmtp.to, configured: true }
+          : undefined,
+        notifyUrl: updated.notifyUrl ? '[redacted]' : undefined,
+      },
       userId: actor.userId,
       role: actor.role,
     });
-    return updated;
+    return {
+      ...updated,
+      notifySmtp: updated.notifySmtp
+        ? { ...updated.notifySmtp, pass: undefined }
+        : undefined,
+    };
   }
 
   @Post('watch/run')
@@ -318,8 +335,8 @@ export class CopilotController {
   }
 
   @Get('insights/thresholds')
-  async getInsightThresholds(): Promise<CopilotInsightThresholds> {
-    return this.insightsService.getThresholds();
+  async getInsightThresholds(@Req() req: Request): Promise<CopilotInsightThresholds> {
+    return this.insightsService.getThresholds(this.getActor(req));
   }
 
   @Put('insights/thresholds')
@@ -329,7 +346,7 @@ export class CopilotController {
   ): Promise<CopilotInsightThresholds> {
     const actor = this.getActor(req);
     const sanitized = sanitizeInsightThresholds(dto as Record<string, unknown>);
-    const updated = await this.insightsService.updateThresholds(sanitized, actor.userId);
+    const updated = await this.insightsService.updateThresholds(sanitized, actor);
     void this.auditService.log({
       action: 'copilot.insight_thresholds_update',
       entity: 'ai_settings',

@@ -4,7 +4,7 @@
 |---|---|
 | 应用 | Flow（出口电商平台） |
 | 技术栈 | React 19 + NestJS 12（Express 5）+ Drizzle ORM + PostgreSQL 16（pg_trgm） |
-| 文档版本 | v1.21.0 / 2026-10-24 |
+| 文档版本 | v1.22.0 / 2026-11-01 |
 
 ---
 
@@ -37,6 +37,7 @@
 | `PAYPAL_CLIENT_ID` | PayPal 收款 | PayPal Developer → Apps & Credentials |
 | `PAYPAL_CLIENT_SECRET` | PayPal 收款 | 同上 |
 | `PAYPAL_MODE` | 沙箱/正式 | `sandbox` 或 `live` |
+| `PAYPAL_WEBHOOK_ID` | PayPal webhook 验签 | PayPal Developer → Webhooks |
 | `GOOGLE_CLIENT_ID` | Google 登录 | Google Cloud Console → OAuth 同意屏 → 凭据 |
 | `GOOGLE_CLIENT_SECRET` | Google 登录 | 同上 |
 | `17TRACK_API_KEY` | 真实物流轨迹 | 17TRACK 开放平台申请；发货自动注册运单，查询失败自动回退演示时间线 |
@@ -64,7 +65,7 @@ vim .env
 docker compose up -d --build
 
 # 4. 查看日志
-docker compose logs -f app
+docker compose logs -f server
 
 # 5. 访问
 #    买家端: http://localhost:3000/
@@ -75,8 +76,8 @@ docker compose logs -f app
 
 ## 四、首次初始化
 
-1. **数据库扩展**：`docker/postgres/init.sql` 首次启动自动执行 `CREATE EXTENSION vector` 与 `pg_trgm`。
-2. **建表**：应用启动时 Drizzle 自动同步表结构（users / products / orders / payments / reviews / favorites / coupons / logistics / audit_logs / ai_usage_log 等）。
+1. **数据库扩展**：`docker/postgres/init.sql` 首次启动自动执行 `CREATE EXTENSION pg_trgm`。
+2. **建表**：容器启动时执行 `scripts/db/migrate.mjs` 逐个应用 `drizzle/*.sql` 迁移（users / products / orders / payments / reviews / favorites / coupons / logistics / audit_logs / ai_usage_log 等）。
 3. **种子数据**：预置示例商品与分类；首个卖家账号可通过注册接口后在数据库把 `role` 改为 `seller`。
 4. **创建平台管理员**（跨店运营必需）：
 

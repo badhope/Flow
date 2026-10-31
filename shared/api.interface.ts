@@ -525,7 +525,7 @@ export interface AIUsageStatsQuery {
 
 export type CopilotToolKind = 'read' | 'write';
 
-export type CopilotActionStatus = 'pending' | 'executed' | 'rejected' | 'failed';
+export type CopilotActionStatus = 'pending' | 'processing' | 'executed' | 'rejected' | 'failed';
 
 export interface CopilotMessage {
   id: string;

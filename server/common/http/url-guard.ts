@@ -42,9 +42,15 @@ function isBlockedIpv6(host: string): boolean {
   if (h.startsWith('fe80')) return true;                            // 链路本地
   if (h.startsWith('fc') || h.startsWith('fd')) return true;        // ULA fc00::/7
   if (h.startsWith('::ffff:')) {
-    // IPv4-mapped：取出内嵌 IPv4 再判
-    const v4 = h.slice(7);
-    if (v4.includes('.')) return isBlockedIpv4(v4);
+    // IPv4-mapped：同时支持点分形式与十六进制形式（如 ::ffff:7f00:1）。
+    const mapped = h.slice(7);
+    if (mapped.includes('.')) return isBlockedIpv4(mapped);
+    const groups = mapped.split(':');
+    if (groups.length === 2 && groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) {
+      const packed = Number.parseInt(groups[0], 16) * 0x10000 + Number.parseInt(groups[1], 16);
+      const v4 = `${packed >>> 24}.${(packed >>> 16) & 255}.${(packed >>> 8) & 255}.${packed & 255}`;
+      return isBlockedIpv4(v4);
+    }
   }
   return false;
 }

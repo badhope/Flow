@@ -45,7 +45,9 @@ export function resolveLlmConfig(
     baseUrl: dbBase || envBase || DEFAULT_LLM_BASE_URL,
     apiKey: dbKey || envKey || '',
     model: dbModel || envModel || DEFAULT_LLM_MODEL,
-    source: dbKey ? 'db' : envKey ? 'env' : 'none',
+    // 任意 DB 字段存在都表示界面配置源：DB baseUrl 不能借用 env key 后伪装成 env 来源，
+    // 否则生产 SSRF 守卫会绕过并把共享 key 发到卖家可控地址。
+    source: dbKey || dbBase || dbModel ? 'db' : envKey ? 'env' : 'none',
   };
 }
 

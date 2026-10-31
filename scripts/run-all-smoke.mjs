@@ -113,8 +113,12 @@ try {
 
   console.log('[e2e] ALL PASSED');
 } catch (err) {
-  console.error('[e2e] FAILED', err);
-  process.exitCode = 1;
+  console.error('[e2e] FAILED', err instanceof Error ? err.stack ?? err.message : String(err));
+  for (const p of procs) { try { p.kill('SIGTERM'); } catch {} }
+  try { await pg.stop(); } catch {}
+  await rm(path.join(repo, '.e2e-pg'), { recursive: true, force: true }).catch(() => {});
+  // 显式退出：embedded-postgres 的 exit hook 可能覆盖 process.exitCode，不能假绿。
+  process.exit(1);
 } finally {
   for (const p of procs) { try { p.kill('SIGTERM'); } catch {} }
   try { await pg.stop(); } catch {}

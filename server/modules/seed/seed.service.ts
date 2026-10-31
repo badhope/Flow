@@ -13,8 +13,8 @@ import {
 } from '../../database/schema';
 
 /**
- * 演示数据种子：SEED_DEMO_DATA=true 且数据库为空时写入一次。
- * 演示账号：卖家 seller@example.com / seller123；买家 buyer@example.com / buyer123；优惠码 TEST10（九折）。
+ * 演示数据种子：仅 development/test 且数据库为空时写入一次。
+ * 生产环境禁止启用，避免写入公开演示账户。
  */
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -24,6 +24,10 @@ export class SeedService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     if (process.env.SEED_DEMO_DATA !== 'true') return;
+    if (process.env.NODE_ENV === 'production') {
+      this.logger.error('拒绝在 production 中启用 SEED_DEMO_DATA，避免写入公开演示账户');
+      throw new Error('SEED_DEMO_DATA is forbidden in production');
+    }
 
     try {
       const userCount = await this.db.select({ n: count() }).from(users);

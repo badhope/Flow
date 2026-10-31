@@ -11,7 +11,7 @@ describe('resolveLlmConfig', () => {
     expect(cfg).toEqual({ baseUrl: 'http://ui.test/v1', apiKey: 'sk-ui', model: 'ui-model', source: 'db' });
   });
 
-  it('R12: 字段级合并 —— DB 只填 BaseURL 时，Key/模型回退环境变量（source=env）', () => {
+  it('R12: DB BaseURL 与环境 Key 合并时标记为 db，触发生产 SSRF 防护', () => {
     const cfg = resolveLlmConfig(
       { baseUrl: 'http://ui.test', apiKey: null, model: '' },
       { LLM_BASE_URL: 'https://env.test', LLM_API_KEY: 'sk-env', LLM_MODEL: 'env-model' },
@@ -19,7 +19,7 @@ describe('resolveLlmConfig', () => {
     expect(cfg.baseUrl).toBe('http://ui.test');
     expect(cfg.apiKey).toBe('sk-env');
     expect(cfg.model).toBe('env-model');
-    expect(cfg.source).toBe('env');
+    expect(cfg.source).toBe('db');
   });
 
   it('R12: 全空时 source=none，仅保留默认 base/model（apiKey 为空串）', () => {
