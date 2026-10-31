@@ -748,7 +748,7 @@ const CopilotPage: React.FC = () => {
           <div className="space-y-4 p-4">
             {(!detail || detail.messages.length === 0) && !loadingDetail && (
               <div className="mx-auto max-w-2xl py-10 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B1F3A] text-white">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--flow-accent-soft)] text-[var(--flow-accent)]">
                   <Bot className="h-7 w-7" />
                 </div>
                 <h2 className="text-lg font-semibold text-slate-800">今天想处理什么？</h2>
@@ -861,7 +861,7 @@ const CopilotPage: React.FC = () => {
                       </div>
                       <div className="h-2.5 w-full rounded bg-slate-100">
                         <div
-                          className="h-2.5 rounded bg-[#00C2B8]"
+                          className="h-2.5 rounded bg-[var(--flow-accent)]"
                           style={{ width: `${width}%` }}
                         />
                       </div>
@@ -871,7 +871,7 @@ const CopilotPage: React.FC = () => {
               </div>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
                 整体转化（打开 → 下单）：
-                <span className="ml-1 font-semibold text-[#0B1F3A]">
+                <span className="ml-1 font-semibold text-[var(--flow-text-1)]">
                   {(funnel.overallConversion * 100).toFixed(1)}%
                 </span>
               </div>
@@ -881,7 +881,7 @@ const CopilotPage: React.FC = () => {
                   {demandGaps.length > 0 && (
                     <button
                       type="button"
-                      className="text-xs font-normal text-[#00C2B8] hover:underline"
+                      className="text-xs font-normal text-[var(--flow-accent)] hover:underline"
                       onClick={() => {
                         setFunnelOpen(false);
                         void handleSend(
@@ -963,7 +963,7 @@ const CopilotPage: React.FC = () => {
                     )}
                     <button
                       type="button"
-                      className="text-xs font-normal text-[#00C2B8] hover:underline"
+                      className="text-xs font-normal text-[var(--flow-accent)] hover:underline"
                       onClick={() => void auditActive()}
                       disabled={auditing}
                     >
@@ -993,7 +993,7 @@ const CopilotPage: React.FC = () => {
                   <span>AI 文案质量抽检</span>
                   <button
                     type="button"
-                    className="text-xs font-normal text-[#00C2B8] hover:underline"
+                    className="text-xs font-normal text-[var(--flow-accent)] hover:underline"
                     onClick={() => void runCopyAudit()}
                     disabled={copyAuditing}
                   >
