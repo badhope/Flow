@@ -57,7 +57,8 @@ export class NotifyTransport {
     if (!/^https?:\/\//i.test(url)) {
       return { ok: false, channel: 'webhook', message: 'Webhook 地址必须以 http(s):// 开头', permanent: true };
     }
-    if (!isSafePublicHttpUrl(url)) {
+    // 与巡检设置同一策略：生产拦截内网地址；开发放行（本地 mock / 局域网 webhook 合法）
+    if (process.env.NODE_ENV === 'production' && !isSafePublicHttpUrl(url)) {
       this.logger.warn(`Webhook 地址被拒绝（私网/保留地址）: ${url}`);
       return {
         ok: false,

@@ -15,6 +15,10 @@ export class SelectService {
   ) {}
 
   async selectProducts(actor: SellerActor): Promise<AISelectResponse> {
+    // 空店铺提前返回仅用于「已配置模型」的卖家——省一次无意义的 LLM 调用。
+    // 未配置模型时必须走完整链路：gateway.chat 会如实落 ai_usage_log(success=false)
+    // 再抛 400（诚实降级 + 可观测），绝不静默返回空数组冒充「无推荐」。
+    const configured = await this.aiGateway.isConfigured({ userId: actor.userId, role: actor.role });
     const sellerId = actor.userId;
     const allCategories = await this.db.select({
       id: categories.id,
@@ -32,7 +36,7 @@ export class SelectService {
       ));
     const scopedIds = sellerProductIds.map((row) => row.id);
 
-    if (scopedIds.length === 0) {
+    if (scopedIds.length === 0 && configured) {
       return { items: [] };
     }
 

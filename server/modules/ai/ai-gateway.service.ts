@@ -78,8 +78,17 @@ export class AiGatewayService {
       else if (bareKey === 'llm_model') dbConfig.model = row.value;
     }
     const resolved = resolveLlmConfig(dbConfig, process.env);
-    // SSRF 防护（切片 4）：baseUrl 指向内网/保留地址时按未配置处理（诚实拒绝，不打内网）
-    if (resolved.apiKey && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))) {
+    // SSRF 防护（分级执行）：
+    // - source=env：运维配置（本地 mock、CI、自托管网关属合法内网端点）→ 不拦截
+    // - source=db：界面写入，seller 可控。生产环境必须拒绝内网地址；
+    //   开发环境放行——Ollama/LM Studio 等本地网关监听 127.0.0.1 是合法场景。
+    // 已知边界：DNS rebinding 需 fetch 层钉住解析结果，见 url-guard 注释。
+    if (
+      resolved.source === 'db'
+      && process.env.NODE_ENV === 'production'
+      && resolved.apiKey
+      && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))
+    ) {
       throw new BadRequestException(
         '模型 Base URL 不可用：禁止指向内网/保留地址（SSRF 防护）。请在「模型设置」中改为公网地址',
       );

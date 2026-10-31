@@ -226,7 +226,7 @@ export class CopilotController {
   @Post('watch/run')
   async runWatchNow(@Req() req: Request): Promise<{ ran: boolean; message: string }> {
     const actor = this.getActor(req);
-    const result = await this.watchService.runOnce(true);
+    const result = await this.watchService.runOnce(true, actor);
     void this.auditService.log({
       action: 'copilot.watch_run',
       entity: 'ai_settings',
