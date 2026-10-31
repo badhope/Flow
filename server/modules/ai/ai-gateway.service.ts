@@ -86,7 +86,7 @@ export class AiGatewayService {
     //   开发环境放行——Ollama/LM Studio 等本地网关监听 127.0.0.1 是合法场景。
     // 已知边界：DNS rebinding 需 fetch 层钉住解析结果，见 url-guard 注释。
     if (
-      resolved.source === 'db'
+      resolved.baseUrlSource === 'db'
       && process.env.NODE_ENV === 'production'
       && resolved.apiKey
       && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))

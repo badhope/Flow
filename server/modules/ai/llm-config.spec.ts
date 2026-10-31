@@ -8,7 +8,7 @@ describe('resolveLlmConfig', () => {
       { baseUrl: 'http://ui.test/v1', apiKey: 'sk-ui', model: 'ui-model' },
       { LLM_BASE_URL: 'https://env.test', LLM_API_KEY: 'sk-env', LLM_MODEL: 'env-model' },
     );
-    expect(cfg).toEqual({ baseUrl: 'http://ui.test/v1', apiKey: 'sk-ui', model: 'ui-model', source: 'db' });
+    expect(cfg).toEqual({ baseUrl: 'http://ui.test/v1', apiKey: 'sk-ui', model: 'ui-model', source: 'db', baseUrlSource: 'db' });
   });
 
   it('R12: DB BaseURL 与环境 Key 合并时标记为 db，触发生产 SSRF 防护', () => {
@@ -19,7 +19,8 @@ describe('resolveLlmConfig', () => {
     expect(cfg.baseUrl).toBe('http://ui.test');
     expect(cfg.apiKey).toBe('sk-env');
     expect(cfg.model).toBe('env-model');
-    expect(cfg.source).toBe('db');
+    expect(cfg.source).toBe('env');
+    expect(cfg.baseUrlSource).toBe('db');
   });
 
   it('R12: 全空时 source=none，仅保留默认 base/model（apiKey 为空串）', () => {

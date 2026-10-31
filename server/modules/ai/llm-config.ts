@@ -17,6 +17,7 @@ export interface ResolvedLlmConfig {
   apiKey: string;
   model: string;
   source: LlmConfigSource;
+  baseUrlSource: 'db' | 'env' | 'default';
 }
 
 export const DEFAULT_LLM_BASE_URL = 'https://api.deepseek.com';
@@ -45,9 +46,10 @@ export function resolveLlmConfig(
     baseUrl: dbBase || envBase || DEFAULT_LLM_BASE_URL,
     apiKey: dbKey || envKey || '',
     model: dbModel || envModel || DEFAULT_LLM_MODEL,
-    // 任意 DB 字段存在都表示界面配置源：DB baseUrl 不能借用 env key 后伪装成 env 来源，
-    // 否则生产 SSRF 守卫会绕过并把共享 key 发到卖家可控地址。
-    source: dbKey || dbBase || dbModel ? 'db' : envKey ? 'env' : 'none',
+    // source 保留字段级合并契约：清除 UI Key 后可回退 env Key；
+    // baseUrlSource 单独标识 URL 是否由卖家界面控制，供生产 SSRF 校验使用。
+    source: dbKey ? 'db' : envKey ? 'env' : 'none',
+    baseUrlSource: dbBase ? 'db' : envBase ? 'env' : 'default',
   };
 }
 
