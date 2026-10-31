@@ -63,7 +63,7 @@ export class AiController {
       configured: config.apiKey.length > 0,
       // 匿名买家只需要知道导购是否可用；不暴露模型供应商/配置来源。
       model: isAuthenticated && config.apiKey.length > 0 ? config.model : undefined,
-      source: isAuthenticated ? config.source : undefined,
+      source: isAuthenticated ? config.source : config.apiKey.length > 0 ? undefined : 'none',
     };
   }
 
