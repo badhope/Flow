@@ -208,6 +208,7 @@ npm run lint          # ESLint
 npm run type:check    # 前后端类型
 npm test              # 单元测试
 npm run build && npm run smoke:all     # 先构建，再跑全量 E2E（embedded-postgres；Docker 可选）
+# 本机 PG 场景：E2E_DATABASE_URL=...flow_e2e_xxx E2E_RESET_DATABASE=yes npm run e2e:local
 npm run build         # 生产构建
 ```
 

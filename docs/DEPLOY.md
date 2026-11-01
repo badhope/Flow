@@ -177,3 +177,14 @@ npm run build && npm run smoke:all     # 先构建，再跑全量 E2E（embedded
 npm run capture:all   # 重建 30 张截图 + 演示视频（需本机 Chrome/Edge + ffmpeg；缺构建时自动 npm run build）
 npm run cli -- health # CLI 健康检查
 ```
+
+若使用已有本机 PostgreSQL 而非 embedded 实例，`npm run e2e:local` 要求显式指定一个可丢弃库，且不会清理未知进程：
+
+```bash
+# 库名必须以 flow_e2e_ 开头、位于本机；E2E_RESET_DATABASE=yes 表示同意清空该库
+E2E_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:5432/flow_e2e_check' \
+E2E_RESET_DATABASE=yes \
+npm run e2e:local
+```
+
+未设置这两个变量时脚本会直接退出，不会删除任何数据库。
