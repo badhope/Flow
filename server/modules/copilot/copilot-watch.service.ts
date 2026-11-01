@@ -296,8 +296,8 @@ function normalizeSmtp(value: unknown): SmtpConfig | undefined {
   const from = typeof raw.from === 'string' ? raw.from.trim().slice(0, 200) : '';
   const to = typeof raw.to === 'string' ? raw.to.trim().slice(0, 500) : '';
   if (!host || !from || !to) return undefined;
-  // 生产 SMTP 目标必须来自运维 allowlist，避免 seller 用 host/port 探测内网或云元数据。
-  if (process.env.NODE_ENV === 'production') {
+  // 非 dev/test 环境 SMTP 目标必须来自运维 allowlist，避免 seller 用 host/port 探测内网或云元数据。
+  if (enforcePublicOutbound()) {
     const allowed = (process.env.SMTP_ALLOWED_HOSTS ?? '')
       .split(',')
       .map((item) => item.trim().toLowerCase())

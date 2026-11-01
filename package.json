@@ -1,7 +1,7 @@
 {
   "name": "flow",
   "version": "1.22.0",
-  "description": "AI 原生跨境出货台 · AI-Native Cross-Border Commerce Platform (storefront + seller AI workbench)",
+  "description": "AI \u539f\u751f\u8de8\u5883\u51fa\u8d27\u53f0 \u00b7 AI-Native Cross-Border Commerce Platform (storefront + seller AI workbench)",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -42,7 +42,8 @@
     "smoke:all": "node scripts/run-all-smoke.mjs",
     "capture:all": "node scripts/capture/run-capture.mjs",
     "admin:create": "node scripts/db/create-admin.mjs",
-    "e2e:local": "bash scripts/run-e2e-local.sh"
+    "e2e:local": "bash scripts/run-e2e-local.sh",
+    "test:scripts": "node --test scripts/test-run-all-smoke.mjs && bash scripts/test-run-e2e-local.sh"
   },
   "dependencies": {
     "@nestjs/axios": "^12.0.1",

@@ -3,8 +3,10 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d "$ROOT/.e2e-script-test.XXXXXXXX")
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/bin" "$T/project/scripts"
+mkdir -p "$T/bin" "$T/project/scripts" "$T/project/dist-server/server"
 cp "$ROOT/scripts/run-e2e-local.sh" "$T/project/scripts/run-e2e-local.sh"
+printf '%s
+' 'const host = process.env.HOST;' > "$T/project/dist-server/server/main.js"
 REAL_SLEEP=$(command -v sleep)
 REAL_NODE=$(command -v node)
 printf '%s\n' "$REAL_NODE" > "$T/real-node"

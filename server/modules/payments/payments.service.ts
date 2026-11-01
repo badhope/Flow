@@ -387,11 +387,11 @@ export class PaymentsService {
       };
     }
 
-    // 演示支付生产门禁（fail-closed）：生产未显式 ALLOW_DEMO_PAYMENT=true 时拒绝，
+    // 演示支付环境门禁（fail-closed）：仅 development/test 放行，
     // 防止未配渠道的生产环境被 provider=demo 直接置 paid 白拿订单。
     if (!isDemoPaymentAllowed({ nodeEnv: process.env.NODE_ENV, allowDemoPayment: process.env.ALLOW_DEMO_PAYMENT })) {
       throw new ForbiddenException(
-        '演示支付在生产环境不可用：请配置真实支付渠道（Stripe/PayPal），或在 .env 设 ALLOW_DEMO_PAYMENT=true 显式开启演示模式',
+        '演示支付仅在 development/test 环境可用：生产请配置真实支付渠道（Stripe/PayPal）',
       );
     }
     return this.processDemoPayment(orderId, provider, order, auditMeta);

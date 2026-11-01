@@ -41,6 +41,12 @@ const net = require("net");
 })().catch(() => { console.error("[e2e] required port unavailable"); process.exit(1); });
 '
 
+# 防止陈旧构建缺少 HOST 支持，导致测试服务监听全部网卡
+if ! grep -q 'process\.env\.HOST' dist-server/server/main.js 2>/dev/null; then
+  printf '%s\n' '[e2e] dist-server build lacks HOST support; run npm run build first' >&2
+  exit 1
+fi
+
 printf '%s\n' '[e2e] reset explicitly selected disposable database...'
 "${clean_env[@]}" E2E_DATABASE_URL="$DB_URL" node -e '
 const postgres = require("postgres");

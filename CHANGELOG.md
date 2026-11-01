@@ -16,8 +16,8 @@
 - 模型配置作用域化：`llm_*` 改为 `{userId}:` 前缀键，任意卖家无法读写他人或平台配置；
   未配置时回退环境变量，不串用他人密钥。
 - 巡检与通知设置按卖家作用域；定时调度只由平台（admin）配置驱动。
-- 演示支付生产门禁：`NODE_ENV=production` 下 `provider=demo` 默认 403，
-  需显式 `ALLOW_DEMO_PAYMENT=true` 才放行。
+- 演示支付环境门禁：仅 `development`/`test` 允许 `provider=demo`；
+  其他环境（含未知/缺失 `NODE_ENV`）一律 403，`ALLOW_DEMO_PAYMENT` 不再提供绕过。
 - 出站 URL 防 SSRF：webhook 地址、巡检通知地址、LLM Base URL 统一拒绝环回、私网、
   CGNAT、链路本地与裸主机名。
 - 依赖：nodemailer 7.0.13 → 10.3.1，multer 通过 overrides 升至 2.5.0；`npm audit --omit=dev` 归零。

@@ -24,9 +24,9 @@ export class SeedService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     if (process.env.SEED_DEMO_DATA !== 'true') return;
-    if (process.env.NODE_ENV === 'production') {
-      this.logger.error('拒绝在 production 中启用 SEED_DEMO_DATA，避免写入公开演示账户');
-      throw new Error('SEED_DEMO_DATA is forbidden in production');
+    if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
+      this.logger.error('拒绝在非 development/test 环境启用 SEED_DEMO_DATA，避免写入公开演示账户');
+      throw new Error('SEED_DEMO_DATA is only allowed in development or test');
     }
 
     try {
