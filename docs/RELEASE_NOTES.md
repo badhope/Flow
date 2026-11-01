@@ -17,7 +17,7 @@
 |---|---|
 | `npm run lint` | 0 问题 |
 | `npm run type:check` | 前后端 0 错误 |
-| `npm test` | 248/248 通过（42 文件） |
+| `npm test` | 256/256 通过（42 文件） |
 | GitHub Actions | 三仓 quality + E2E 全绿（commit 5499cf3） |
 | `npm run build` | 通过 |
 | `npm run smoke:all` | 6 套全通过（workflows / degraded / transaction / providers / copilot / shopper） |

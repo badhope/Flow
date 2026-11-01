@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { isSafePublicHttpUrl } from '../../common/http/url-guard';
+import { enforcePublicOutbound, isSafePublicHttpUrl, publicOutboundAgents } from '../../common/http/url-guard';
 import { aiSettings, aiUsageLog } from '../../database/schema';
 import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
 import type { SellerActor } from './seller-scope';
@@ -80,14 +80,9 @@ export class AiGatewayService {
       else if (bareKey === 'llm_model') dbConfig.model = row.value;
     }
     const resolved = resolveLlmConfig(dbConfig, process.env);
-    // SSRF 防护（分级执行）：
-    // - source=env：运维配置（本地 mock、CI、自托管网关属合法内网端点）→ 不拦截
-    // - source=db：界面写入，seller 可控。生产环境必须拒绝内网地址；
-    //   开发环境放行——Ollama/LM Studio 等本地网关监听 127.0.0.1 是合法场景。
-    // 已知边界：DNS rebinding 需 fetch 层钉住解析结果，见 url-guard 注释。
     if (
       resolved.baseUrlSource === 'db'
-      && process.env.NODE_ENV === 'production'
+      && enforcePublicOutbound()
       && resolved.apiKey
       && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))
     ) {
@@ -158,6 +153,10 @@ export class AiGatewayService {
             'Content-Type': 'application/json',
           },
           timeout: 60000,
+          maxRedirects: 0,
+          ...(config.baseUrlSource === 'db' && enforcePublicOutbound()
+            ? { ...publicOutboundAgents(), proxy: false as const }
+            : {}),
         }),
       );
 

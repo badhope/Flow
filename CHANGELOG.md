@@ -32,7 +32,7 @@
 - 首页自然语言意图入口：接入真实导购会话，AI 不可用时回退关键词搜索。
 - 管理员创建入口：`npm run admin:create`。
 - 产品路线图（`docs/ROADMAP.md`）。
-- 前端测试基础设施：vitest + jsdom + testing-library，新增 17 个前端用例（组件行为与纯函数；全项目共 248 个用例）。
+- 前端测试基础设施：vitest + jsdom + testing-library，新增 17 个前端用例（组件行为与纯函数；全项目共 256 个用例）。
 
 ### Changed
 
@@ -55,7 +55,7 @@
 
 - `npm run type:check`：前后端 0 错误
 - `npm run lint`：0 问题
-- `npm test`：42 文件 / 248 用例全通过（原 34 / 198）
+- `npm test`：42 文件 / 256 用例全通过（原 34 / 198）
 - `npm run build`：通过
 - `npm audit --omit=dev`：0 漏洞
 - 变异验证：移除 AI 兜底逻辑后 2 个前端用例转红；移除退款数量 clamp 后 1 个后端用例转红
@@ -86,7 +86,7 @@
 
 ### Verification
 - 三仓 GitHub Actions：`Lint / Typecheck / Test / Build` 与 `E2E Smoke (Postgres)` 全绿（`f9d1e35`）。
-- 本地：lint 0 / 双端 typecheck 0 / 42 文件、248 用例 / build 通过；当前 HEAD 的真库 E2E 需通过 `npm run build && npm run smoke:all` 重新复核。
+- 本地：lint 0 / 双端 typecheck 0 / 42 文件、256 用例 / build 通过；当前 HEAD 的真库 E2E 需通过 `npm run build && npm run smoke:all` 重新复核。
 - 9 个 Dependabot PR 已全部关闭（依赖已集中升级），三仓开放 PR 数为 0。
 
 ---

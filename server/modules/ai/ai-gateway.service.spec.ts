@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 import { AiGatewayService } from './ai-gateway.service';
 import { LLM_NOT_CONFIGURED_MESSAGE } from './llm-config';
 
@@ -78,6 +79,42 @@ describe('AiGatewayService 诚实拒绝', () => {
   });
 });
 
+
+describe('AiGatewayService outbound policy', () => {
+  it('对数据库目标禁用重定向和代理并使用安全连接代理', async () => {
+    const original = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = 'staging';
+      const post = vi.fn((_url: string, _body: unknown, _options: unknown) => of({ data: { choices: [{ message: { content: 'ok' } }] } }));
+      const db = {
+        select: () => ({ from: async () => [
+          { key: 'llm_base_url', value: 'https://example.com/v1' },
+          { key: 'llm_api_key', value: 'test-key' },
+        ] }),
+        insert: () => ({ values: async () => undefined }),
+      } as never;
+      const gateway = new AiGatewayService({ post } as never, db);
+      await expect(gateway.chat([{ role: 'user', content: 'hello' }])).resolves.toMatchObject({ content: 'ok' });
+      expect(post.mock.calls[0][2]).toMatchObject({ maxRedirects: 0, proxy: false, httpAgent: expect.anything(), httpsAgent: expect.anything() });
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+
+  it('未知环境拒绝数据库配置的私网地址', async () => {
+    const original = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = 'staging';
+      const gateway = makeGateway([
+        { key: 'llm_base_url', value: 'http://127.0.0.1/v1' },
+        { key: 'llm_api_key', value: 'test-key' },
+      ]);
+      await expect(gateway.resolveConfig()).rejects.toBeInstanceOf(BadRequestException);
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+});
 
 describe('AiGatewayService usage tenant scope', () => {
   it('R30: seller usage stats query includes actor userId, admin query stays global', async () => {

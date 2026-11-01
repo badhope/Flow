@@ -4,7 +4,7 @@ import { DRIZZLE_DATABASE, type Database } from '../../database/database.provide
 import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotNotifyService } from './copilot-notify.service';
-import { isSafePublicHttpUrl } from '../../common/http/url-guard';
+import { enforcePublicOutbound, isSafePublicHttpUrl } from '../../common/http/url-guard';
 import type { SmtpConfig } from './copilot-notify-transport';
 import { diffNewInsights } from './copilot-insight-digest';
 import { formatForChannel, renderDigest } from './copilot-digest-format';
@@ -115,9 +115,8 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     const actorId = actor.userId ?? '';
     const settingsKey = watchSettingsKeyFor(actor);
     const current = await this.getSettings(actor);
-    // 与 LLM Base URL 同一策略：生产强制拦截，开发放行（本地 mock / 局域网 webhook 属合法场景）
     if (
-      process.env.NODE_ENV === 'production'
+      enforcePublicOutbound()
       && input.notifyUrl !== undefined
       && input.notifyUrl.trim()
       && !isSafePublicHttpUrl(input.notifyUrl.trim())

@@ -14,7 +14,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-248%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-256%20passing-10b981?style=flat-square)](server)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
 [**约 70 秒演示视频**](docs/video/demo.mp4) · [**产品截图**](docs/screenshots) · [**架构说明**](docs/ARCHITECTURE.md) · [**部署指南**](docs/DEPLOY.md) · [**OpenAPI 端点说明**](docs/DEPLOY.md#九seo-与机器可读端点)
@@ -29,7 +29,7 @@
 
 ## 这是什么？
 
-**Flow 是一个可以直接跑起来的开源跨境电商平台。** 它不是演示壳子：买家用真实流程下单付款，卖家在真实数据上运营，AI 调用真实模型并把结果写回业务系统。
+**Flow 是一个可以部署的开源跨境电商平台。** 买卖流程使用应用数据库；真实支付、物流和 AI 依赖各自的服务商配置及验证，演示数据、模拟支付和模拟轨迹不代表真实交易或运输。
 
 | | 买家商城 Buyer Storefront | 卖家 AI 工作台 Seller Workbench |
 |---|---|---|
@@ -144,7 +144,8 @@
 git clone https://github.com/X33834/Flow.git
 cd Flow
 cp .env.example .env          # 必须替换 JWT_SECRET 与 POSTGRES_PASSWORD
-# production compose 不写入演示账号；本地演示请使用 NODE_ENV=development + SEED_DEMO_DATA=true
+# 默认 Compose 强制 production；禁止 SEED_DEMO_DATA=true，否则拒绝启动
+# PostgreSQL 默认绑定宿主机 127.0.0.1:5432；HTTPS 与代理配置见部署指南
 # 构建后再执行完整 E2E：npm run build && npm run smoke:all
 docker compose up -d --build
 ```
@@ -153,7 +154,7 @@ docker compose up -d --build
 - 买家商城 <http://localhost:3000/>
 - 卖家工作台 <http://localhost:3000/seller/dashboard>
 
-本地演示账号仅在 development 环境显式设置 `SEED_DEMO_DATA=true` 后写入；production compose 不会自动创建演示账号。
+本地演示账号仅在非 production 环境显式设置 `SEED_DEMO_DATA=true` 且数据库尚无用户时写入。默认 Compose 的 `NODE_ENV: production` 覆盖 `.env`；不能通过修改 `.env` 切换为 development。使用下方本地开发方式及独立空数据库进行演示，绝不复用生产库。
 
 ### 方式二：本地开发
 
@@ -186,7 +187,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 
 优先级：**界面设置 > 环境变量 `LLM_*` > 未配置（诚实报错）**。
 
-> 内置本地模拟器 `npm run mock:providers` 同时扮演 Stripe / PayPal / LLM，带真实签名回调，无需任何真实凭据即可跑通 AI 与支付全链路。
+> `npm run mock:providers` 是本地模拟服务，不连接真实 Stripe、PayPal 或模型；模拟器的签名回调和冒烟测试不证明服务商沙箱兼容性。真实沙箱验证、PayPal webhook 协议待核实事项、17TRACK 和 SMTP 的验收步骤见[部署指南](docs/DEPLOY.md#八隔离沙箱验收)。
 
 ---
 
@@ -195,7 +196,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 | 维度 | 现状 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` 契约 |
-| 测试 | **248 个测试用例**（42 个测试文件）（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
+| 测试 | **256 个测试用例**（42 个测试文件）（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
 | E2E | **6 套全链路冒烟**：业务工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | CI | GitHub Actions：lint → typecheck → test+coverage → build → Postgres E2E |
 | 安全 | HttpOnly Cookie JWT、CSRF 头校验、按端点限流、Stripe/PayPal 验签、租户隔离、SSRF/重放防护 |
@@ -285,7 +286,7 @@ Flow 的定位是「AI 原生跨境出口电商」：买家用自然语言发现
 | 当前版本 | **v1.22.0** |
 | 开发状态 | ✅ 功能闭环，维护模式（bug fix / 安全修复 / 小版本依赖升级） |
 | CI | GitHub Actions：lint / typecheck / test / build + 6 套 E2E，三仓全绿 |
-| 单元测试 | 248 / 248（42 文件） |
+| 单元测试 | 256 / 256（42 文件） |
 | 许可 | MIT |
 
 **为什么进入维护模式**：核心闭环（商城 + 卖家后台 + AI Agent + 副驾 + 支付退款 + SEO/OpenAPI）已完整交付并有 E2E 覆盖；
