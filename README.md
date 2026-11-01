@@ -143,8 +143,9 @@
 ```bash
 git clone https://github.com/X33834/Flow.git
 cd Flow
-cp .env.example .env          # 至少填写 JWT_SECRET
-# 可选：SEED_DEMO_DATA=true 首次启动写入演示账号/商品/优惠券
+cp .env.example .env          # 必须替换 JWT_SECRET 与 POSTGRES_PASSWORD
+# production compose 不写入演示账号；本地演示请使用 NODE_ENV=development + SEED_DEMO_DATA=true
+# 构建后再执行完整 E2E：npm run build && npm run smoke:all
 docker compose up -d --build
 ```
 
@@ -152,7 +153,7 @@ docker compose up -d --build
 - 买家商城 <http://localhost:3000/>
 - 卖家工作台 <http://localhost:3000/seller/dashboard>
 
-演示账号：`seller@example.com / seller123`、`buyer@example.com / buyer123`，优惠码 `TEST10`。
+本地演示账号仅在 development 环境显式设置 `SEED_DEMO_DATA=true` 后写入；production compose 不会自动创建演示账号。
 
 ### 方式二：本地开发
 
@@ -194,7 +195,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 | 维度 | 现状 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` 契约 |
-| 测试 | **248 个测试用例**（37 个测试文件）（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
+| 测试 | **248 个测试用例**（42 个测试文件）（金额/退款/运费/状态机/验签/租户/查询/SEO/通知） |
 | E2E | **6 套全链路冒烟**：业务工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | CI | GitHub Actions：lint → typecheck → test+coverage → build → Postgres E2E |
 | 安全 | HttpOnly Cookie JWT、CSRF 头校验、按端点限流、Stripe/PayPal 验签、租户隔离、SSRF/重放防护 |
@@ -205,7 +206,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 npm run lint          # ESLint
 npm run type:check    # 前后端类型
 npm test              # 单元测试
-npm run smoke:all     # 一键全量 E2E（embedded-postgres，无需 Docker）
+npm run build && npm run smoke:all     # 先构建，再跑全量 E2E（embedded-postgres；Docker 可选）
 npm run build         # 生产构建
 ```
 
@@ -284,7 +285,7 @@ Flow 的定位是「AI 原生跨境出口电商」：买家用自然语言发现
 | 当前版本 | **v1.22.0** |
 | 开发状态 | ✅ 功能闭环，维护模式（bug fix / 安全修复 / 小版本依赖升级） |
 | CI | GitHub Actions：lint / typecheck / test / build + 6 套 E2E，三仓全绿 |
-| 单元测试 | 248 / 248（37 文件） |
+| 单元测试 | 248 / 248（42 文件） |
 | 许可 | MIT |
 
 **为什么进入维护模式**：核心闭环（商城 + 卖家后台 + AI Agent + 副驾 + 支付退款 + SEO/OpenAPI）已完整交付并有 E2E 覆盖；

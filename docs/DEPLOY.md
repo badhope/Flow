@@ -23,7 +23,7 @@
 
 ## 二、获取密钥清单
 
-部署前在各服务商处申请以下密钥，填入 `.env`。**未填的能力自动进入演示模式，不会阻断启动。**
+部署前在各服务商处申请以下密钥，填入 `.env`。能力缺省行为不同：AI 未配置返回 400；生产支付默认拒绝演示通道；物流未配置 17TRACK 时使用演示轨迹。
 
 | 环境变量 | 用途 | 获取位置 |
 |---|---|---|
@@ -78,7 +78,7 @@ docker compose logs -f server
 
 1. **数据库扩展**：`docker/postgres/init.sql` 首次启动自动执行 `CREATE EXTENSION pg_trgm`。
 2. **建表**：容器启动时执行 `scripts/db/migrate.mjs` 逐个应用 `drizzle/*.sql` 迁移（users / products / orders / payments / reviews / favorites / coupons / logistics / audit_logs / ai_usage_log 等）。
-3. **种子数据**：预置示例商品与分类；首个卖家账号可通过注册接口后在数据库把 `role` 改为 `seller`。
+3. **种子数据**：production compose 不写入演示数据；本地演示需使用 `NODE_ENV=development` 并显式设置 `SEED_DEMO_DATA=true`。生产卖家账号通过 `npm run admin:create` 或安全注册流程创建。
 4. **创建平台管理员**（跨店运营必需）：
 
    ```bash
@@ -160,7 +160,7 @@ docker compose exec -T postgres psql -U flow flow < backup_2026-09-30.sql
 ## 十、验证与演示资产
 
 ```bash
-npm run smoke:all     # 一键全量 E2E（embedded-postgres，无需 Docker）
+npm run build && npm run smoke:all     # 先构建，再跑全量 E2E（embedded-postgres；Docker 可选）
 npm run capture:all   # 重建 30 张截图 + 演示视频（需本机 Chrome/Edge + ffmpeg；缺构建时自动 npm run build）
 npm run cli -- health # CLI 健康检查
 ```
