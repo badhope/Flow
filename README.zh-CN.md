@@ -112,7 +112,7 @@
 | **AI 分析中心** | **退款管理** |
 | ![AI](docs/screenshots/22-ai-center.png) | ![退款](docs/screenshots/20-seller-refunds.png) |
 
-全部 31 张截图在 [`docs/screenshots/`](docs/screenshots)，由 `npm run capture:all` 针对真实数据库重新生成，不会与代码脱节。
+全部 31 张截图在 [`docs/screenshots/`](docs/screenshots)，由 `npm run capture:all` 针对真实数据库重新生成，不会与代码脱节。仓库社交预览图由 `npm run capture:social` 渲染。
 
 ---
 

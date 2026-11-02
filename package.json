@@ -41,6 +41,7 @@
     "cli": "node scripts/cli.mjs",
     "smoke:all": "node scripts/run-all-smoke.mjs",
     "capture:all": "node scripts/capture/run-capture.mjs",
+    "capture:social": "node scripts/capture/social-preview.mjs",
     "admin:create": "node scripts/db/create-admin.mjs",
     "e2e:local": "bash scripts/run-e2e-local.sh",
     "qa:stack": "node scripts/qa/stack.mjs",
