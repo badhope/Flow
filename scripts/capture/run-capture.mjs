@@ -1,30 +1,23 @@
 #!/usr/bin/env node
 /**
- * 一键生成演示资产：embedded-postgres + 迁移 + 应用（生产构建）+ 演示数据 + 截图 + 录屏。
+ * Demo asset generator: PostgreSQL + migrations + production build + seed data + screenshots + recording.
  *
- * 用法：npm run capture:all
- * 依赖：本机 Chrome（或 CHROME_PATH）、ffmpeg（录屏时）。
- * 说明：缺少 dist/dist-server 时会自动执行 npm run build。
+ * Usage: npm run capture:all
+ * Env:
+ *   CAPTURE_DATABASE_URL  reuse an existing PostgreSQL (database name must look disposable)
+ *   CAPTURE_PORT          app port (default 3300)
+ *   CHROME_PATH           browser binary override
+ * Dependencies: a Chrome/Edge build and, for recording, ffmpeg.
+ * The production build is created automatically when dist/ is missing.
  */
-import EmbeddedPostgres from 'embedded-postgres';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 
-const PG_PORT = Number(process.env.CAPTURE_PG_PORT ?? 5439);
 const APP_PORT = Number(process.env.CAPTURE_PORT ?? 3300);
+const EXTERNAL_DATABASE_URL = process.env.CAPTURE_DATABASE_URL?.trim() || '';
 const repo = process.cwd();
-
-const pg = new EmbeddedPostgres({
-  databaseDir: path.join(repo, '.capture-pg'),
-  port: PG_PORT,
-  user: 'flow',
-  password: 'flow_pass',
-  persistent: false,
-  onLog: () => {},
-  onError: (e) => console.error('[pg]', e),
-});
 
 const procs = [];
 function start(name, args, env) {
@@ -51,7 +44,7 @@ function run(script, env = {}) {
     p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${script} exited ${code}`))));
   });
 }
-/** 执行 npm 等非 node 可执行文件（Windows 需要 .cmd 后缀） */
+/** Run npm-like binaries (Windows needs the .cmd shim). */
 function runBin(command, args) {
   const bin = process.platform === 'win32' ? `${command}.cmd` : command;
   return new Promise((resolve, reject) => {
@@ -60,26 +53,57 @@ function runBin(command, args) {
   });
 }
 
+let pg;
+let tempDir;
 try {
-  // 截图跑的是生产构建：缺产物时先构建，避免 "cannot find dist-server/server/main.js"
+  // Screenshots run against the production build; create it up front so a missing
+  // artifact never turns into "cannot find dist-server/server/main.js".
   if (!existsSync(path.join(repo, 'dist-server/server/main.js')) || !existsSync(path.join(repo, 'dist/index.html'))) {
-    console.log('[capture] 未找到生产构建，先执行 npm run build ...');
+    console.log('[capture] no production build found, running npm run build ...');
     await runBin('npm', ['run', 'build']).catch(() => {
-      throw new Error('构建失败：请先手动执行 npm run build');
+      throw new Error('build failed: run npm run build manually first');
     });
   }
 
-  console.log('[capture] starting embedded postgres...');
-  await pg.initialise();
-  await pg.start();
-  await pg.createDatabase('flow');
+  let dbUrl;
+  if (EXTERNAL_DATABASE_URL) {
+    const { assertDisposableDatabase } = await import('../run-all-smoke.mjs');
+    assertDisposableDatabase(EXTERNAL_DATABASE_URL);
+    console.log('[capture] using external postgres');
+    const { default: postgres } = await import('postgres');
+    const reset = postgres(EXTERNAL_DATABASE_URL, { max: 1, onnotice: () => {} });
+    try {
+      await reset`DROP SCHEMA IF EXISTS public CASCADE`;
+      await reset`CREATE SCHEMA public`;
+    } finally {
+      await reset.end({ timeout: 5 });
+    }
+    dbUrl = EXTERNAL_DATABASE_URL;
+  } else {
+    const { default: EmbeddedPostgres } = await import('embedded-postgres');
+    tempDir = await mkdtemp(path.join(repo, '.capture-pg-'));
+    pg = new EmbeddedPostgres({
+      databaseDir: path.join(tempDir, 'postgres'),
+      port: Number(process.env.CAPTURE_PG_PORT ?? 5439),
+      user: 'flow',
+      password: 'flow_pass',
+      persistent: false,
+      onLog: () => {},
+      onError: (e) => console.error('[pg]', e),
+    });
+    console.log('[capture] starting embedded postgres...');
+    await pg.initialise();
+    await pg.start();
+    await pg.createDatabase('flow');
+    dbUrl = `postgresql://flow:flow_pass@127.0.0.1:${process.env.CAPTURE_PG_PORT ?? 5439}/flow`;
+  }
 
-  const dbUrl = `postgresql://flow:flow_pass@127.0.0.1:${PG_PORT}/flow`;
   await run('scripts/db/migrate.mjs', { DATABASE_URL: dbUrl });
 
   const env = {
     DATABASE_URL: dbUrl,
     NODE_ENV: 'development',
+    HOST: '127.0.0.1',
     PORT: String(APP_PORT),
     APP_URL: `http://127.0.0.1:${APP_PORT}`,
     JWT_SECRET: 'capture-secret-key-at-least-32-characters',
@@ -109,6 +133,6 @@ try {
   for (const p of procs) {
     try { p.kill('SIGTERM'); } catch {}
   }
-  try { await pg.stop(); } catch {}
-  await rm(path.join(repo, '.capture-pg'), { recursive: true, force: true }).catch(() => {});
+  if (pg) { try { await pg.stop(); } catch {} }
+  if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
 }

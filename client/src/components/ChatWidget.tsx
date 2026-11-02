@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MessageCircle, X, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,10 @@ const ChatWidget: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { language, t } = useLanguage();
   const chatText = t.chat;
+  // Buyer-only widget: the seller workbench has its own copilot and the floating
+  // bubble overlaps the composer on dense seller screens.
+  const { pathname } = useLocation();
+  const isSellerArea = pathname.startsWith('/seller');
 
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -116,6 +121,8 @@ const ChatWidget: React.FC = () => {
     };
     void checkStatus();
   }, []);
+
+  if (isSellerArea) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">

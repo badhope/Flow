@@ -1,4 +1,3 @@
-import EmbeddedPostgres from 'embedded-postgres';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -9,6 +8,22 @@ const PG_PORT = Number(process.env.E2E_PG_PORT ?? 5437);
 const APP_PORT = Number(process.env.E2E_APP_PORT ?? 3121);
 const MOCK_PORT = Number(process.env.E2E_MOCK_PORT ?? 4870);
 const repo = process.cwd();
+// External-database mode: reuse an already running PostgreSQL (e.g. Windows host
+// service or CI service container) instead of the embedded binary.
+const EXTERNAL_DATABASE_URL = process.env.E2E_DATABASE_URL?.trim() || '';
+
+/**
+ * A database may only be wiped when its name clearly identifies it as a
+ * disposable E2E target. This prevents `E2E_DATABASE_URL` typos from clearing a
+ * real database.
+ */
+export function assertDisposableDatabase(databaseUrl) {
+  const name = new URL(databaseUrl).pathname.replace(/^\//, '');
+  if (!/e2e|smoke|test/i.test(name)) {
+    throw new Error(`refusing to reset database "${name}": name must contain e2e, smoke or test`);
+  }
+  return name;
+}
 
 export const loopbackEnv = Object.freeze({ HOST: '127.0.0.1', MOCK_HOST: '127.0.0.1' });
 
@@ -99,27 +114,45 @@ function assertChildren() {
 try {
   const serverBuild = await readFile(path.join(repo, 'dist-server/server/main.js'), 'utf8');
   if (!/process\.env\.HOST\b/.test(serverBuild)) throw new Error('server build does not support HOST; rebuild before running smoke');
-  await checkPorts([PG_PORT, APP_PORT, APP_PORT + 1, MOCK_PORT]);
+  await checkPorts([APP_PORT, APP_PORT + 1, MOCK_PORT]);
   tempDir = await mkdtemp(path.join(repo, '.e2e-smoke-'));
   baseProcessEnv = { ...cleanEnv(process.env, path.join(tempDir, 'no-dotenv')), ...loopbackEnv };
-  let pgLog = '';
-  pg = new EmbeddedPostgres({
-    databaseDir: path.join(tempDir, 'postgres'),
-    port: PG_PORT,
-    user: 'flow',
-    password: 'flow_pass',
-    persistent: true,
-    onLog: (message) => { pgLog = (pgLog + message).slice(-4096); },
-    onError: (e) => console.error('[pg]', e),
-  });
-  console.log('[e2e] starting embedded postgres...');
-  await pg.initialise();
-  pgLog = '';
-  try { await pg.start(); } catch (error) { throw new Error(`postgres start failed: ${error ?? pgLog}`); }
-  await pg.createDatabase('flow');
-  console.log('[e2e] postgres ready');
+  let dbUrl;
+  if (EXTERNAL_DATABASE_URL) {
+    const name = assertDisposableDatabase(EXTERNAL_DATABASE_URL);
+    console.log(`[e2e] using external postgres database "${name}"`);
+    const { default: postgres } = await import('postgres');
+    const reset = postgres(EXTERNAL_DATABASE_URL, { max: 1, onnotice: () => {} });
+    try {
+      await reset`DROP SCHEMA IF EXISTS public CASCADE`;
+      await reset`CREATE SCHEMA public`;
+    } finally {
+      await reset.end({ timeout: 5 });
+    }
+    console.log('[e2e] reset database (fresh-container semantics)');
+    dbUrl = EXTERNAL_DATABASE_URL;
+  } else {
+    const { default: EmbeddedPostgres } = await import('embedded-postgres');
+    await checkPorts([PG_PORT]);
+    let pgLog = '';
+    pg = new EmbeddedPostgres({
+      databaseDir: path.join(tempDir, 'postgres'),
+      port: PG_PORT,
+      user: 'flow',
+      password: 'flow_pass',
+      persistent: true,
+      onLog: (message) => { pgLog = (pgLog + message).slice(-4096); },
+      onError: (e) => console.error('[pg]', e),
+    });
+    console.log('[e2e] starting embedded postgres...');
+    await pg.initialise();
+    pgLog = '';
+    try { await pg.start(); } catch (error) { throw new Error(`postgres start failed: ${error ?? pgLog}`); }
+    await pg.createDatabase('flow');
+    console.log('[e2e] postgres ready');
+    dbUrl = `postgresql://flow:flow_pass@127.0.0.1:${PG_PORT}/flow`;
+  }
 
-  const dbUrl = `postgresql://flow:flow_pass@127.0.0.1:${PG_PORT}/flow`;
   const migrate = spawn(process.execPath, ['scripts/db/migrate.mjs'], { cwd: repo, env: { ...baseProcessEnv, DATABASE_URL: dbUrl }, stdio: 'inherit' });
   await new Promise((res, rej) => { migrate.once('error', rej); migrate.once('exit', (c) => (c === 0 ? res() : rej(new Error('migrate failed ' + c)))); });
   assertChildren();

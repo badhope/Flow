@@ -5,7 +5,14 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { checkPorts, cleanEnv, loopbackEnv, waitReady } from './run-all-smoke.mjs';
+import { checkPorts, cleanEnv, loopbackEnv, waitReady, assertDisposableDatabase } from './run-all-smoke.mjs';
+
+test('external database guard only accepts disposable names', () => {
+  assert.equal(assertDisposableDatabase('postgresql://u:p@127.0.0.1:5432/flow_e2e'), 'flow_e2e');
+  assert.equal(assertDisposableDatabase('postgresql://u:p@127.0.0.1:5432/smoke_test'), 'smoke_test');
+  assert.throws(() => assertDisposableDatabase('postgresql://u:p@127.0.0.1:5432/flow'), /refusing to reset/);
+  assert.throws(() => assertDisposableDatabase('postgresql://u:p@127.0.0.1:5432/production'), /refusing to reset/);
+});
 
 test('occupied ports fail without contacting or stopping their owner', async () => {
   const server = createServer();

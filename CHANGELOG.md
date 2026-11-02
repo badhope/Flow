@@ -5,6 +5,57 @@
 
 ---
 
+## [1.23.0] — 2026-11-02
+
+**主题：可验证性、可移植性与文档对齐。** 不新增产品功能，让既有平台在作者机器之外可证明地跑起来，
+并让仓库对人、对编码 agent 都可自解释。
+
+### Added
+
+- `scripts/run-all-smoke.mjs` 支持 `E2E_DATABASE_URL`：没有 Docker、embedded 二进制无法启动时，
+  六套 E2E 可跑在任意可达的 PostgreSQL 上（Windows 主机、CI service、托管 PG）。
+- `assertDisposableDatabase()` 护栏：库名不含 `e2e` / `smoke` / `test` 时拒绝重置，防止误清真实库。
+- `scripts/qa/stack.mjs`：一条命令完成「重置可丢弃库 → 迁移 → 启动生产服务 → 播种演示数据」。
+- `scripts/qa/journey-audit.mjs`：真实浏览器走遍买家与卖家全部路由，控制台错误、请求失败、
+  页面异常或内容缺失均判失败。
+- `scripts/qa/purchase-journey.mjs`：用真实可见控件走完「列表 → 详情 → 加购 → 购物车 → 结算 → 订单」。
+- `npm run qa:journey` / `qa:purchase` / `qa:stack` 脚本。
+- `README.zh-CN.md`：英文 README 的完整中文对应版本。
+- `docs/PROJECT-MANAGEMENT.md`：版本号、发布清单、分支策略、多远程发布流程。
+- `docs/MAINTAINERS.md`：角色定义与评审要求。
+
+### Changed
+
+- 截图管线在截图前滚动整页以触发懒加载图片解码，并在任何图片解码失败时让整轮失败；
+  此前整页截图会残留空白商品卡片。
+- 截图管线支持 `CAPTURE_DATABASE_URL`，不再强依赖 embedded PostgreSQL。
+- README 改为英文主页面 + 语言切换，中文版是完整翻译而非残缺镜像。
+- 发布素材重生成：31 张截图与演示视频来自真实 PostgreSQL 运行，而不是在 Windows 管理员权限下
+  无法启动的 embedded 路径。
+
+### Fixed
+
+- 整页截图中商品卡片空白：折叠区下方 `loading="lazy"` 图片在截图前未解码。
+- `scripts/capture/run-capture.mjs` 在 Windows 管理员账户下完全无法运行。
+
+### Verification
+
+- `npm run lint` — 0 问题
+- `npm run type:check` — 前后端 0 错误
+- `npm test` — 273/273，43 个文件
+- `npm run build` — 前后端构建通过
+- `npm audit --omit=dev` — 0 漏洞（官方 npm 源）
+- `npm run smoke:all` — Windows + PostgreSQL 16.15 上六套全通过
+- `npm run qa:journey` — 19 条路由，0 控制台错误，0 请求失败
+
+### Known limits
+
+- 真实服务商沙箱验收（Stripe 测试模式、PayPal sandbox capture 与 webhook、17TRACK 真实轨迹、
+  SMTP 投递）仍待执行，见 `docs/DEPLOY.md` 第八节；PayPal webhook 验签协议兼容性未验证。
+- DNS 固定覆盖出站 HTTP 客户端；在解析与连接之间返回不同答案的恶意 resolver 被收敛但未彻底消除。
+
+---
+
 ## [1.22.0] — 2026-11-01
 
 **主题：从「电商模板 + 后台」重构为「AI 原生平台」；同时补齐多租户安全短板。**

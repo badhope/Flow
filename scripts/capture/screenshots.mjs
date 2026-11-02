@@ -47,6 +47,36 @@ async function settle(page, ms = 1200) {
   }
 }
 
+/**
+ * Scroll through the document so lazy-loaded images below the fold decode,
+ * then wait until every <img> settles. Without this a full-page screenshot
+ * captures empty product tiles.
+ */
+async function hydrateLazyImages(page) {
+  await page.evaluate(async () => {
+    const step = Math.max(200, Math.floor(window.innerHeight * 0.8));
+    const height = document.documentElement.scrollHeight;
+    for (let y = 0; y < height; y += step) {
+      window.scrollTo(0, y);
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    window.scrollTo(0, 0);
+    await new Promise((r) => setTimeout(r, 200));
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const pending = await page.evaluate(() => Array.from(document.images).filter((img) => !img.complete).length);
+    if (pending === 0) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+/** Count images that failed to decode so a broken asset never ships silently. */
+async function countBrokenImages(page) {
+  return page.evaluate(
+    () => Array.from(document.images).filter((img) => img.complete && img.naturalWidth === 0 && img.getAttribute('src')).length,
+  );
+}
+
 /** 每个角色只登录一次（认证端点有 5 次/分限流），随后复用会话 */
 const loginCache = new Map();
 
@@ -149,6 +179,7 @@ async function main() {
 
   let ok = 0;
   const failures = [];
+  const brokenImages = [];
 
   for (const shot of SHOTS) {
     let url = shot.path;
@@ -179,6 +210,7 @@ async function main() {
 
       await page.goto(`${BASE}${url}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
       await settle(page, 1500);
+      await hydrateLazyImages(page);
 
       if (shot.scrollTo === 'floor') {
         await page.evaluate(() => {
@@ -188,6 +220,12 @@ async function main() {
           heading?.scrollIntoView({ block: 'start' });
         });
         await settle(page, 600);
+      }
+
+      const broken = await countBrokenImages(page);
+      if (broken > 0) {
+        brokenImages.push(`${shot.file}: ${broken}`);
+        console.warn(`[capture] ! ${shot.file} 有 ${broken} 张图片未能解码`);
       }
 
       const file = path.join(OUT, shot.file);
@@ -207,6 +245,7 @@ async function main() {
       await setLanguage(page, 'en');
       await page.goto(`${BASE}/collections/${context.collectionSlug}`, { waitUntil: 'domcontentloaded' });
       await settle(page, 1500);
+      await hydrateLazyImages(page);
       await page.screenshot({ path: path.join(OUT, '12-collection-detail.png'), fullPage: true });
       ok += 1;
       console.log('[capture] ✓ 12-collection-detail.png');
@@ -221,6 +260,11 @@ async function main() {
   if (failures.length > 0) {
     console.log('[capture] 失败明细：');
     for (const f of failures) console.log('  -', f);
+    process.exitCode = 1;
+  }
+  if (brokenImages.length > 0) {
+    console.error('[capture] 图片解码失败：');
+    for (const item of brokenImages) console.error('  -', item);
     process.exitCode = 1;
   }
 }

@@ -65,10 +65,9 @@ Flow/
 │       ├── contexts/      # AuthContext / LanguageContext
 │       └── i18n/          # zh / en / es / pt 四语言
 ├── server/        # NestJS 12 后端
-│   └── src/
-│       ├── modules/       # 25 个业务模块（auth/products/orders/ai/copilot/...）
-│       ├── common/        # middleware / guards / filters
-│       └── database/      # Drizzle schema
+│   ├── modules/       # 业务模块（auth/products/orders/ai/copilot/...）
+│   ├── common/        # middleware / guards / filters
+│   └── database/      # Drizzle schema
 ├── shared/        # 前后端共享 TypeScript 类型与 DTO 接口
 ├── scripts/       # 运维脚本（种子数据 / 备份等）
 ├── docker/        # postgres init.sql（建扩展）

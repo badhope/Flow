@@ -60,13 +60,10 @@ import type {
 import { toast } from 'sonner';
 import { notifyError } from '@/lib/error-feedback';
 
-const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; model: string }> = [
-  { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
-  { label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-  { label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus' },
-  { label: 'OpenAI', baseUrl: 'https://api.openai.com', model: 'gpt-4o-mini' },
-  { label: '火山方舟', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: '' },
-];
+import AgentRoster from './ai-center/AgentRoster';
+import ModelSettingsPanel from './ai-center/ModelSettingsPanel';
+import UsagePanel from './ai-center/UsagePanel';
+import ReportHistoryPanel from './ai-center/ReportHistoryPanel';
 
 const AICenterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -445,91 +442,22 @@ const AICenterPage: React.FC = () => {
       </div>
 
       {/* Agent 名册：内置 + 自定义 */}
-      <FlowPanel
-        title={zh ? 'Agent 名册' : 'Agent roster'}
-        description={
-          zh ? '内置 Agent 只读；自定义 Agent 可编辑提示词与输出格式' : 'Built-ins are read-only; custom agents are fully editable'
-        }
-        icon={Bot}
-        actions={
-          <button type="button" onClick={openCreateAgent} className="flow-btn-accent h-8 text-xs">
-            <Plus className="size-3.5" />
-            {zh ? '新建 Agent' : 'New agent'}
-          </button>
-        }
-        bodyClassName="space-y-4"
-      >
-        <div className="grid gap-2 sm:grid-cols-2">
-          {[...agents.builtin.map((a) => ({ kind: 'builtin' as const, agent: a })), ...agents.custom.map((a) => ({ kind: 'custom' as const, agent: a }))].map((entry) => (
-            <div
-              key={entry.kind === 'builtin' ? entry.agent.key : entry.agent.id}
-              className="rounded-lg border border-[var(--flow-line-1)] bg-[var(--flow-surface-2)] p-3"
-            >
-              <div className="flex items-start gap-2">
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--flow-accent-soft)]">
-                  <Bot className="size-3.5 text-[var(--flow-accent)]" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] font-medium text-[var(--flow-text-1)]">
-                      {entry.agent.name}
-                    </span>
-                    <span className="shrink-0 rounded border border-[var(--flow-line-2)] px-1 text-[9px] text-[var(--flow-text-3)]">
-                      {entry.kind === 'builtin' ? (zh ? '内置' : 'builtin') : (zh ? '自定义' : 'custom')}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[var(--flow-text-2)]">
-                    {entry.agent.description}
-                  </p>
-                  {entry.kind === 'custom' && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRunAgentId(entry.agent.id);
-                          void handleRunAgent(entry.agent);
-                        }}
-                        className="text-[11px] text-[var(--flow-accent)] transition-opacity hover:opacity-80"
-                      >
-                        {zh ? '试跑' : 'Run'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditAgent(entry.agent)}
-                        className="text-[11px] text-[var(--flow-text-3)] transition-colors hover:text-[var(--flow-text-1)]"
-                      >
-                        {zh ? '编辑' : 'Edit'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleRemoveAgent(entry.agent)}
-                        className="text-[11px] text-[var(--flow-text-3)] transition-colors hover:text-[var(--flow-danger)]"
-                      >
-                        {zh ? '删除' : 'Delete'}
-                      </button>
-                    </div>
-                  )}
-                  {entry.kind === 'custom' && runAgentId === entry.agent.id && (
-                    <div className="mt-2 space-y-2">
-                      <input
-                        value={runInput}
-                        onChange={(e) => setRunInput(e.target.value)}
-                        placeholder={zh ? '输入内容后试跑' : 'Input to test'}
-                        className="h-8 w-full rounded-md border border-[var(--flow-line-2)] bg-[var(--flow-surface-1)] px-2 text-[11px] text-[var(--flow-text-1)] outline-none placeholder:text-[var(--flow-text-3)]"
-                      />
-                      {runOutput && (
-                        <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--flow-surface-1)] p-2 text-[10px] text-[var(--flow-text-2)]">
-                          {runOutput}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </FlowPanel>
+      <AgentRoster
+        zh={zh}
+        builtin={agents.builtin}
+        custom={agents.custom}
+        runAgentId={runAgentId}
+        runInput={runInput}
+        runOutput={runOutput}
+        onRunInputChange={setRunInput}
+        onCreate={openCreateAgent}
+        onRun={(agent) => {
+          setRunAgentId(agent.id);
+          void handleRunAgent(agent);
+        }}
+        onEdit={openEditAgent}
+        onRemove={(agent) => void handleRemoveAgent(agent)}
+      />
 
       {/* 能力入口 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -578,260 +506,30 @@ const AICenterPage: React.FC = () => {
       )}
 
       {/* 模型设置 */}
-      <FlowPanel
-        title={zh ? '模型设置' : 'Model settings'}
-        description={zh ? '任意 OpenAI 兼容端点；保存即生效，未配置时 AI 端点诚实拒绝' : 'Any OpenAI-compatible endpoint; applies on save'}
-        icon={Settings2}
-        bodyClassName="space-y-4"
-      >
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            {aiSettings?.configured ? (
-              <Badge className="bg-emerald-100 text-emerald-700">已配置</Badge>
-            ) : (
-              <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                未配置
-              </Badge>
-            )}
-            {aiSettings?.source === 'db' && <span className="text-muted-foreground">来源：界面设置</span>}
-            {aiSettings?.source === 'env' && (
-              <span className="text-muted-foreground">来源：环境变量（引导默认值）</span>
-            )}
-            {aiSettings?.apiKeyMasked && (
-              <span className="text-muted-foreground">当前 Key：{aiSettings.apiKeyMasked}</span>
-            )}
-          </div>
+      <ModelSettingsPanel
+        zh={zh}
+        settings={aiSettings}
+        form={settingsForm}
+        saving={settingsSaving}
+        testing={settingsTesting}
+        testResult={settingsTestResult}
+        onChange={setSettingsForm}
+        onSave={() => void handleSaveAiSettings()}
+        onTest={() => void handleTestAiSettings()}
+        onClearKey={() => void handleClearApiKey()}
+      />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">一键预填：</span>
-            {PROVIDER_PRESETS.map((preset) => (
-              <Button
-                key={preset.label}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                onClick={() =>
-                  setSettingsForm((prev) => ({ ...prev, baseUrl: preset.baseUrl, model: preset.model }))
-                }
-              >
-                {preset.label}
-              </Button>
-            ))}
-            <span className="text-xs text-muted-foreground">
-              （Key 请使用您自己的账号；也可直接手填任意 OpenAI 兼容端点）
-            </span>
-          </div>
+      <UsagePanel zh={zh} stats={usageStats} loading={usageLoading} />
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label>Base URL</Label>
-              <Input
-                value={settingsForm.baseUrl}
-                placeholder="https://api.deepseek.com"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>API Key</Label>
-              <Input
-                type="password"
-                value={settingsForm.apiKey}
-                placeholder="留空不修改；输入新值覆盖"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, apiKey: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>模型名</Label>
-              <Input
-                value={settingsForm.model}
-                placeholder="deepseek-chat"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, model: e.target.value }))}
-              />
-            </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void handleSaveAiSettings()} disabled={settingsSaving}>
-              {settingsSaving ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-1 h-4 w-4" />
-              )}
-              保存设置
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleTestAiSettings()}
-              disabled={settingsTesting}
-            >
-              {settingsTesting ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="mr-1 h-4 w-4" />
-              )}
-              测试连通（使用已保存配置）
-            </Button>
-            {aiSettings?.apiKeyMasked && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-600 hover:text-red-700"
-                onClick={() => void handleClearApiKey()}
-              >
-                清除界面 Key
-              </Button>
-            )}
-          </div>
+      <ReportHistoryPanel
+        zh={zh}
+        reports={reports}
+        activeReport={activeReport}
+        onView={(id) => void handleViewReport(id)}
+        onClose={() => setActiveReport(null)}
+      />
 
-          {settingsTestResult && (
-            <p className={`text-sm ${settingsTestResult.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-              {settingsTestResult.message}
-            </p>
-          )}
-        </FlowPanel>
-
-      {/* 用量统计 */}
-      <FlowPanel
-        title={zh ? 'AI 用量统计' : 'AI usage'}
-        description={zh ? '累计调用量与资源消耗' : 'Cumulative calls and resource use'}
-        icon={BarChart3}
-      >
-          {usageLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : usageStats ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-ai-section-type="card-stat">
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Zap className="h-3.5 w-3.5" />
-                    总调用次数
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {usageStats.totalCalls.toLocaleString()}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Clock className="h-3.5 w-3.5" />
-                    总耗时(秒)
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.totalDurationMs / 1000).toFixed(1)}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Token 总量
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.totalInputTokens + usageStats.totalOutputTokens).toLocaleString()}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    成功率
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.successRate * 100).toFixed(1)}%
-                  </div>
-                </div>
-              </div>
-              {usageStats.byAgent.length > 0 && (
-                <div className="pt-2">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">
-                    按 Agent 分布
-                  </div>
-                  <div className="space-y-2">
-                    {usageStats.byAgent.map((stat) => (
-                      <div
-                        key={stat.agent}
-                        className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
-                      >
-                        <span className="text-sm font-medium text-slate-700 capitalize">
-                          {stat.agent}
-                        </span>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span>{stat.calls} 次</span>
-                          <span>{stat.inputTokens + stat.outputTokens} tokens</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-      </FlowPanel>
-
-      {/* 趋势报告结果 */}
-      {trendReport && (
-        <FlowPanel
-          title={trendReport.title || (zh ? '市场趋势简报' : 'Trend brief')}
-          description={(zh ? '生成时间：' : 'Generated ') + new Date(trendReport.createdAt).toLocaleString(zh ? 'zh-CN' : 'en-US')}
-          icon={TrendingUp}
-        >
-          <div className="prose prose-sm max-w-none text-[var(--flow-text-2)]">
-            <Markdown>{trendReport.content}</Markdown>
-          </div>
-        </FlowPanel>
-      )}
-
-      {/* 历史报告（落库回看） */}
-      <FlowPanel
-        title={zh ? '历史报告' : 'Report history'}
-        description={zh ? '已生成的趋势报告落库保存，可随时回看' : 'Saved trend reports, reviewable anytime'}
-        icon={Clock}
-      >
-          {reports.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">暂无历史报告</p>
-          ) : (
-            <div className="space-y-2">
-              {reports.map((report) => (
-                <div
-                  key={report.id}
-                  className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-slate-800">
-                      {report.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(report.createdAt).toLocaleString('zh-CN')}
-                      {report.model ? ` · ${report.model}` : ''}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleViewReport(report.id)}
-                  >
-                    查看
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          {activeReport && (
-            <div className="mt-4 rounded-lg border p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-800">
-                  {activeReport.title}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setActiveReport(null)}>
-                  收起
-                </Button>
-              </div>
-              <div className="prose prose-sm max-w-none">
-                <Markdown>{activeReport.content}</Markdown>
-              </div>
-            </div>
-          )}
-      </FlowPanel>
 
       {/* 选品建议结果 */}
       {selectResult && selectResult.items.length > 0 && (

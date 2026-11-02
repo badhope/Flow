@@ -102,3 +102,7 @@ shots/
 # 品牌资源原始备份（本地保留，不入仓）
 client/src/assets/branding/_orig/
 .aqg/
+
+# Local QA artifacts (generated, not published)
+docs/qa/screens/
+*.log

@@ -66,7 +66,7 @@
 
 1. `npm run type:check` 双端 0 错误
 2. `npm run lint` 0 问题
-3. `npm test` 全绿（当前 42 文件 / 256 用例）
+3. `npm test` 全绿（当前 43 文件 / 273 用例）
 4. `npm run build` 通过
 5. `npm audit --omit=dev` 0 高危
 6. 关键页面截图人工验收

@@ -1,24 +1,29 @@
 ---
-name: 功能建议 / Feature request
-about: 提出一个新功能或改进想法
+name: Feature request
+about: Propose a new capability or improvement
 title: "[Feature] "
 labels: enhancement
 assignees: ''
-
 ---
 
-## 需求背景 / Motivation
+## Motivation
 
-<!-- 你想解决什么问题？为什么需要这个功能 -->
+<!-- What problem are you solving? Why does it matter? -->
 
-## 建议方案 / Proposed solution
+## Proposed solution
 
-<!-- 你期望的实现方式（可含示意图/伪代码） -->
+<!-- How you would like it to work. Sketches or pseudo-code welcome. -->
 
-## 备选方案 / Alternatives
+## Alternatives considered
 
-<!-- 其他你考虑过的方式 -->
+<!-- Other approaches you weighed and why you rejected them. -->
 
-## 适用场景 / Use cases
+## Who benefits
 
-<!-- 谁会用到、在什么场景下用 -->
+<!-- Which role — buyer, seller, operator, integrator — and in what situation. -->
+
+## Scope check
+
+- [ ] This does not duplicate an item already listed in `docs/ROADMAP.md`
+- [ ] This does not require a GraphQL rewrite, a plugin marketplace or SaaS billing
+      (explicitly out of scope, see README "Design trade-offs")

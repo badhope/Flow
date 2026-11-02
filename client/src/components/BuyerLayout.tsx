@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import ShopperWidget from './ShopperWidget';
 import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown, Menu, MapPin } from 'lucide-react';
 import logoHorizontal from '@/assets/branding/logo-horizontal.png';
+import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -358,9 +359,9 @@ const BuyerLayout: React.FC = () => {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Image
-                  src={logoHorizontal}
+                  src={logoWhite}
                   alt="Flow"
-                  className="h-8 w-auto object-contain brightness-0 invert"
+                  className="h-8 w-auto object-contain"
                 />
               </div>
                <p className="text-sm">
