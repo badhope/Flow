@@ -35,6 +35,10 @@
 
 ### Fixed
 
+- **CSRF 豁免路径按前缀匹配**：`/api/payments/stripe-webhook-evil` 之类仿冒路径也会绕过
+  `X-Requested-With` 校验。改为精确匹配（去一个尾斜杠），并补 8 个用例锁定行为。
+- 卖家工作台的买家客服悬浮按钮遮挡副驾发送按钮：客服组件改为仅在买家区域渲染。
+- 深色页脚 logo 用 `brightness-0 invert` 处理白底图，导致「AI」被滤成白块：改用白色版 logo。
 - 整页截图中商品卡片空白：折叠区下方 `loading="lazy"` 图片在截图前未解码。
 - `scripts/capture/run-capture.mjs` 在 Windows 管理员账户下完全无法运行。
 
@@ -42,7 +46,7 @@
 
 - `npm run lint` — 0 问题
 - `npm run type:check` — 前后端 0 错误
-- `npm test` — 273/273，43 个文件
+- `npm test` — 286/286，45 个文件（新增 30 个：商品管理 17、RBAC 5、CSRF 8）
 - `npm run build` — 前后端构建通过
 - `npm audit --omit=dev` — 0 漏洞（官方 npm 源）
 - `npm run smoke:all` — Windows + PostgreSQL 16.15 上六套全通过

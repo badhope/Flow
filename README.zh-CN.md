@@ -16,7 +16,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-273%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-286%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -188,7 +188,7 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 |---|---|
 | 类型 | TypeScript strict；前后端共享 `shared/api.interface.ts` 单一契约 |
 | 模块 | 25 个 NestJS 模块、25 个 controller、155 个端点、39 张表、9 个 SQL 迁移 |
-| 测试 | 273 个用例 / 43 个文件（金额、退款、运费、状态机、验签、租户、搜索、SEO、通知） |
+| 测试 | 286 个用例 / 45 个文件（金额、退款、运费、状态机、验签、租户、搜索、SEO、通知） |
 | E2E | 六套：工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | 浏览器 QA | `npm run qa:journey` 用真实浏览器走遍买家与卖家全部路由，任何控制台错误、请求失败或内容缺失都判失败 |
 | CI | lint → typecheck → 单测+覆盖率 → 生产依赖审计 → 构建 → Postgres E2E |
@@ -262,7 +262,7 @@ Flow 刻意选择「单进程 + REST」，优先保证交易正确性与租户�
 | 当前版本 | **v1.23.0** |
 | 状态 | 功能闭环，维护模式：修 bug、打安全补丁、升级依赖 |
 | CI | GitHub Actions 执行 lint、typecheck、单测+覆盖率、生产依赖审计、构建、六套 Postgres E2E |
-| 测试 | 273 / 273（43 文件） |
+| 测试 | 286 / 286（45 文件） |
 | 许可 | MIT |
 
 ---

@@ -3,11 +3,18 @@ import type { Request, Response, NextFunction } from 'express';
 
 const STATE_CHANGING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
-// 第三方服务器回调不会携带浏览器自定义头，按路径白名单豁免 CSRF 校验
-const EXEMPT_PATH_PREFIXES = [
+// Third-party webhook callbacks cannot send browser-only custom headers, so
+// these exact paths bypass the check. Matching is exact (after stripping one
+// trailing slash) — a prefix match would also exempt lookalike routes such as
+// `/api/payments/stripe-webhook-evil`.
+const EXEMPT_PATHS = new Set([
   '/api/payments/stripe-webhook',
   '/api/payments/paypal-webhook',
-];
+]);
+
+function normalizePath(path: string): string {
+  return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+}
 
 @Injectable()
 export class CsrfHeaderMiddleware implements NestMiddleware {
@@ -17,7 +24,7 @@ export class CsrfHeaderMiddleware implements NestMiddleware {
       next();
       return;
     }
-    if (EXEMPT_PATH_PREFIXES.some((prefix) => req.path.startsWith(prefix))) {
+    if (EXEMPT_PATHS.has(normalizePath(req.path))) {
       next();
       return;
     }

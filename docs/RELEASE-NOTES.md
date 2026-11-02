@@ -48,7 +48,7 @@ the multi-remote procedure.
 |---|---|
 | `npm run lint` | 0 problems |
 | `npm run type:check` | 0 errors, client and server |
-| `npm test` | 273/273 across 43 files |
+| `npm test` | 286/286 across 45 files |
 | `npm run build` | server and client built |
 | `npm audit --omit=dev` | 0 vulnerabilities (official npm registry) |
 | `npm run smoke:all` | 6/6 suites on PostgreSQL 16.15 |

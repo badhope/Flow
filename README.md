@@ -16,7 +16,7 @@ From listing to fulfilment to support to review — the whole operating loop liv
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-273%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-286%20passing-10b981?style=flat-square)](server)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
@@ -189,7 +189,7 @@ Resolution order: **UI settings → `LLM_*` environment variables → unconfigur
 |---|---|
 | Types | TypeScript strict; client and server share `shared/api.interface.ts` as the single contract |
 | Modules | 25 NestJS modules, 25 controllers, 155 endpoints, 39 tables, 9 SQL migrations |
-| Tests | 273 unit/integration cases across 43 files (money, refunds, shipping, state machines, signatures, tenancy, search, SEO, notifications) |
+| Tests | 286 unit/integration cases across 45 files (money, refunds, shipping, state machines, signatures, tenancy, search, SEO, notifications) |
 | E2E | Six suites: 16-step workflows, no-key degradation, 19-step transactions, 18-step providers, 19-step copilot, 9-step shopper |
 | Browser QA | `npm run qa:journey` walks every buyer and seller route in a real browser and fails on any console error, failed request or missing content |
 | CI | lint → typecheck → unit+coverage → production audit → build → Postgres E2E |
@@ -263,7 +263,7 @@ Flow is deliberately a single deployable process over REST, optimizing for trans
 | Current version | **v1.23.0** |
 | State | Feature-complete and maintained: bug fixes, security patches, dependency upgrades |
 | CI | GitHub Actions runs lint, typecheck, unit tests with coverage, production audit, build and six Postgres E2E suites |
-| Tests | 273 / 273 across 43 files |
+| Tests | 286 / 286 across 45 files |
 | Licence | MIT |
 
 ---
