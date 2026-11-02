@@ -106,3 +106,4 @@ client/src/assets/branding/_orig/
 # Local QA artifacts (generated, not published)
 docs/qa/screens/
 *.log
+docs/qa/journey-report.json
