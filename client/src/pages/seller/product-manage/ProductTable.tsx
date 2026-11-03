@@ -41,13 +41,15 @@ const ProductTable: React.FC<ProductTableProps> = ({
     <TableHeader>
       <TableRow>
         <TableHead className="w-10">
-          <input
-            type="checkbox"
-            aria-label="全选商品"
-            checked={products.length > 0 && selectedIds.size === products.length}
-            onChange={onToggleSelectAll}
-            className="size-4 accent-blue-600"
-          />
+          <label className="flex size-6 cursor-pointer items-center justify-center">
+            <input
+              type="checkbox"
+              aria-label="全选商品"
+              checked={products.length > 0 && selectedIds.size === products.length}
+              onChange={onToggleSelectAll}
+              className="size-4 cursor-pointer accent-blue-600"
+            />
+          </label>
         </TableHead>
         <TableHead>图片</TableHead>
         <TableHead>SKU</TableHead>
@@ -79,13 +81,15 @@ const ProductTable: React.FC<ProductTableProps> = ({
         products.map((product) => (
           <TableRow key={product.id} data-state={selectedIds.has(product.id) ? 'selected' : undefined}>
             <TableCell>
-              <input
-                type="checkbox"
-                aria-label={`选择 ${product.titleZh}`}
-                checked={selectedIds.has(product.id)}
-                onChange={() => onToggleSelect(product.id)}
-                className="size-4 accent-blue-600"
-              />
+              <label className="flex size-6 cursor-pointer items-center justify-center">
+                <input
+                  type="checkbox"
+                  aria-label={`选择 ${product.titleZh}`}
+                  checked={selectedIds.has(product.id)}
+                  onChange={() => onToggleSelect(product.id)}
+                  className="size-4 cursor-pointer accent-blue-600"
+                />
+              </label>
             </TableCell>
             <TableCell>
               {product.coverImage && (
@@ -114,11 +118,13 @@ const ProductTable: React.FC<ProductTableProps> = ({
                 <Button variant="ghost" size="icon" onClick={() => onEdit(product)} aria-label="编辑商品">
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Switch
-                  checked={product.status === 'active'}
-                  onCheckedChange={(checked) => onToggleStatus(product, checked)}
-                  aria-label="切换上架状态"
-                />
+                <span className="flex h-6 items-center">
+                  <Switch
+                    checked={product.status === 'active'}
+                    onCheckedChange={(checked) => onToggleStatus(product, checked)}
+                    aria-label="切换上架状态"
+                  />
+                </span>
                 <Button
                   variant="ghost"
                   size="icon"

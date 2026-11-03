@@ -18,7 +18,17 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/20 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        className={cn(
+          "focus-visible:ring-ring/20 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1",
+          /**
+           * Radix sets `display: table` on the viewport's first child to measure
+           * content. That makes the child as wide as its widest unbreakable row,
+           * so a long single-line string can widen the whole scroll area and
+           * push its flex parent out of shape. Forcing block + full width keeps
+           * the content inside the track while still allowing vertical scroll.
+           */
+          "[&>div]:!block [&>div]:!w-full",
+        )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

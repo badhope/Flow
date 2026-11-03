@@ -107,3 +107,6 @@ client/src/assets/branding/_orig/
 docs/qa/screens/
 *.log
 docs/qa/journey-report.json
+
+# Local QA audit artifacts (screenshots + report regenerate on demand)
+docs/qa/audit/

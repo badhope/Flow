@@ -232,8 +232,7 @@ const CmsPagesPage: React.FC = () => {
                 <TableHead>标题</TableHead>
                 <TableHead>标识</TableHead>
                 <TableHead>状态</TableHead>
-                <TableHead>公开</TableHead>
-                <TableHead>浏览量</TableHead>
+                <TableHead>已发布</TableHead>
                 <TableHead>更新时间</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
@@ -241,12 +240,12 @@ const CmsPagesPage: React.FC = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">加载中...</TableCell>
+                  <TableCell colSpan={6} className="text-center py-8">加载中...</TableCell>
                 </TableRow>
               )}
               {!loading && pages.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-0">
+                  <TableCell colSpan={6} className="py-0">
                     <Empty>
                       <EmptyHeader>
                         <EmptyMedia variant="icon"><FileText className="size-6" /></EmptyMedia>

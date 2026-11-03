@@ -92,7 +92,7 @@ const LoginPage: React.FC = () => {
 
         <div className="mt-6 text-center text-sm text-slate-500">
           {t.auth.noAccount}{' '}
-          <Link to="/register" className="text-[var(--flow-accent)] hover:underline font-medium">
+          <Link to="/register" className="inline-flex items-center py-1 text-[var(--flow-accent)] hover:underline font-medium">
             {t.auth.signUp}
           </Link>
         </div>

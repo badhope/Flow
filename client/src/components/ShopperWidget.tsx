@@ -191,7 +191,7 @@ const ShopperWidget: React.FC = () => {
   );
 
   return (
-    <div className="fixed bottom-24 right-6 z-40 flex flex-col items-end gap-3">
+    <div className="fixed bottom-6 right-3 z-40 flex flex-col items-end gap-3 sm:bottom-24 sm:right-6">
       {open && (
         <Card className="flex h-[30rem] w-80 flex-col overflow-hidden rounded-xl shadow-xl sm:w-96">
           <div className="flex items-center justify-between bg-[var(--flow-ink)] p-3.5 text-white">
@@ -284,7 +284,7 @@ const ShopperWidget: React.FC = () => {
 
       <Button
         size="lg"
-        className="size-12 rounded-full bg-[var(--flow-accent)] shadow-lg hover:brightness-95"
+        className="size-11 rounded-full bg-[var(--flow-accent)] shadow-lg hover:brightness-95 sm:size-12"
         onClick={() => setOpen((prev) => !prev)}
         aria-label={copy.title}
       >

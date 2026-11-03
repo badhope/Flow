@@ -415,7 +415,7 @@ const CheckoutPage: React.FC = () => {
                         <span className="text-sm font-medium text-slate-700">
                           {t.address.title}
                         </span>
-                        <Link to="/addresses" className="text-xs text-blue-600 hover:underline">
+                        <Link to="/addresses" className="inline-flex items-center py-1 text-xs text-blue-600 hover:underline">
                           {t.address.edit}
                         </Link>
                       </div>

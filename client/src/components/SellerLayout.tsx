@@ -242,7 +242,7 @@ const SellerLayout: React.FC = () => {
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1 text-xs text-[var(--flow-text-3)] transition-colors hover:text-[var(--flow-danger)]"
+              className="flex min-h-6 items-center gap-1 px-1 py-1 text-xs text-[var(--flow-text-3)] transition-colors hover:text-[var(--flow-danger)]"
             >
               <LogOut className="size-3.5" />
               <span className="hidden sm:inline">{zh ? '退出' : 'Sign out'}</span>

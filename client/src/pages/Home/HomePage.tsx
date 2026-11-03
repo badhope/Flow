@@ -48,11 +48,14 @@ const HomePage: React.FC = () => {
            const floorProductIds = storefront.flatMap((section) => section.products.map((p) => p.id));
            const allIds = [...hot.map((p) => p.id), ...newest.items.map((p) => p.id), ...floorProductIds];
            const uniqueIds = Array.from(new Set(allIds));
-           try {
-             const faves = await checkFavoriteBatch(uniqueIds);
-             setFavoriteIds(new Set(faves));
-           } catch (favErr) {
-             console.error('[home] load favorites error', favErr);
+           // Wishlist hearts are a progressive enhancement: if the batch check
+           // fails the tiles simply render unfilled instead of logging an error.
+           if (uniqueIds.length > 0) {
+             try {
+               setFavoriteIds(new Set(await checkFavoriteBatch(uniqueIds)));
+             } catch {
+               setFavoriteIds(new Set());
+             }
            }
          }
       } catch (error: unknown) {
@@ -188,7 +191,7 @@ const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/products')}
-                  className="inline-flex items-center gap-1 text-[var(--flow-text-2)] transition-colors hover:text-[var(--flow-accent)]"
+                  className="inline-flex items-center gap-1 py-1.5 text-[var(--flow-text-2)] transition-colors hover:text-[var(--flow-accent)]"
                 >
                   <ShoppingBag className="size-3" />
                   {language === 'zh' ? '直接逛全部商品' : 'Browse all products'}
@@ -196,8 +199,9 @@ const HomePage: React.FC = () => {
               </div>
             </div>
 
-            {/* 右侧：AI 搭配浮层示意 */}
-            <div className="relative hidden lg:block">
+            {/* 右侧：AI 搭配浮层示意。The parent keeps slack so the -2deg tilt
+                cannot push the card past its container. */}
+            <div className="relative hidden p-2 lg:block">
               <div className="flow-glass rotate-[-2deg] rounded-2xl p-5 transition-transform duration-500 hover:rotate-0">
                 <div className="mb-4 flex items-center gap-2">
                   <span className="flex size-7 items-center justify-center rounded-lg bg-[var(--flow-accent-soft)]">
@@ -259,7 +263,7 @@ const HomePage: React.FC = () => {
           })}
           <Link
             to="/products"
-            className="ml-auto shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900"
+            className="ml-auto inline-flex shrink-0 items-center py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900"
           >
             {t.home.viewAll} →
           </Link>

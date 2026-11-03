@@ -118,7 +118,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <button
             type="button"
             aria-label="导购漏斗"
-            className="text-slate-400 hover:text-slate-600"
+            className="flex size-6 items-center justify-center rounded text-slate-400 hover:bg-[var(--flow-surface-2)] hover:text-slate-600"
             onClick={onOpenFunnel}
           >
             <TrendingUp className="h-3 w-3" />
@@ -126,7 +126,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <button
             type="button"
             aria-label="巡检设置"
-            className="text-slate-400 hover:text-slate-600"
+            className="flex size-6 items-center justify-center rounded text-slate-400 hover:bg-[var(--flow-surface-2)] hover:text-slate-600"
             onClick={onOpenThresholds}
           >
             <Settings2 className="h-3 w-3" />
@@ -134,7 +134,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <button
             type="button"
             aria-label="刷新巡检"
-            className="text-slate-400 hover:text-slate-600"
+            className="flex size-6 items-center justify-center rounded text-slate-400 hover:bg-[var(--flow-surface-2)] hover:text-slate-600"
             onClick={onRefreshInsights}
             disabled={insightsLoading}
           >

@@ -411,18 +411,24 @@ const CouponsPage: React.FC = () => {
                         className={
                           coupon.type === 'percent'
                             ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : coupon.type === 'free_shipping'
+                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         }
                       >
                         {coupon.type === 'percent'
                           ? t.seller.percent
-                          : t.seller.fixed}
+                          : coupon.type === 'free_shipping'
+                            ? '包邮'
+                            : t.seller.fixed}
                       </Badge>
                     </td>
                     <td className="py-3 px-4">
                       {coupon.type === 'percent'
                         ? `${coupon.value}%`
-                        : `$${Number(coupon.value).toFixed(2)}`}
+                        : coupon.type === 'free_shipping'
+                          ? '免运费'
+                          : `$${Number(coupon.value).toFixed(2)}`}
                     </td>
                     <td className="py-3 px-4">${Number(coupon.minOrderAmount).toFixed(2)}</td>
                     <td className="py-3 px-4">

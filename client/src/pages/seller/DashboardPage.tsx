@@ -272,7 +272,7 @@ const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => void fetchData()}
-            className="text-[var(--flow-text-3)] transition-colors hover:text-[var(--flow-text-1)]"
+            className="flex size-6 items-center justify-center rounded text-[var(--flow-text-3)] transition-colors hover:bg-[var(--flow-surface-2)] hover:text-[var(--flow-text-1)]"
             aria-label={zh ? '刷新' : 'Refresh'}
           >
             <RefreshCw className="size-3.5" />

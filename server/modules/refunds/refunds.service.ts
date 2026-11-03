@@ -61,10 +61,11 @@ export class RefundsService {
     return parseRefundItemsJson(raw);
   }
 
-  private mapRefund(row: typeof refunds.$inferSelect) {
+  private mapRefund(row: typeof refunds.$inferSelect, orderNo?: string) {
     return {
       id: row.id,
       orderId: row.orderId,
+      orderNo,
       userId: row.userId,
       refundNo: row.refundNo,
       status: row.status,
@@ -578,15 +579,16 @@ export class RefundsService {
 
     const offset = (page - 1) * pageSize;
     const refundRows = await this.db
-      .select()
+      .select({ refund: refunds, orderNo: orders.orderNo })
       .from(refunds)
+      .leftJoin(orders, eq(orders.id, refunds.orderId))
       .where(whereClause)
       .orderBy(desc(refunds.createdAt))
       .limit(pageSize)
       .offset(offset);
 
     return {
-      items: refundRows.map((row) => this.mapRefund(row)),
+      items: refundRows.map((row) => this.mapRefund(row.refund, row.orderNo ?? undefined)),
       total,
       page,
       pageSize,
@@ -618,15 +620,16 @@ export class RefundsService {
 
     const offset = (page - 1) * pageSize;
     const refundRows = await this.db
-      .select()
+      .select({ refund: refunds, orderNo: orders.orderNo })
       .from(refunds)
+      .leftJoin(orders, eq(orders.id, refunds.orderId))
       .where(whereClause)
       .orderBy(desc(refunds.createdAt))
       .limit(pageSize)
       .offset(offset);
 
     return {
-      items: refundRows.map((row) => this.mapRefund(row)),
+      items: refundRows.map((row) => this.mapRefund(row.refund, row.orderNo ?? undefined)),
       total,
       page,
       pageSize,
@@ -652,6 +655,12 @@ export class RefundsService {
       throw new ForbiddenException('无权查看该退款记录');
     }
 
-    return this.mapRefund(refund);
+    const order = await this.db
+      .select({ orderNo: orders.orderNo })
+      .from(orders)
+      .where(eq(orders.id, refund.orderId))
+      .limit(1);
+
+    return this.mapRefund(refund, order[0]?.orderNo);
   }
 }

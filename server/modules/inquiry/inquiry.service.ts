@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, ConflictException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { eq, desc, count, and, asc, or, isNull } from 'drizzle-orm';
-import { inquirySessions, inquiryMessages } from '../../database/schema';
+import { eq, desc, count, and, asc, or, isNull, sql } from 'drizzle-orm';
+import { inquirySessions, inquiryMessages, users } from '../../database/schema';
 import type {
   InquirySession,
   InquiryMessage,
@@ -47,8 +47,17 @@ export class InquiryService {
         .from(inquirySessions)
         .where(whereClause),
       this.db
-        .select()
+        .select({
+          session: inquirySessions,
+          userName: users.name,
+          lastMessage: sql<string | null>`(
+            SELECT m.content FROM inquiry_messages m
+            WHERE m.session_id = ${inquirySessions.sessionId}
+            ORDER BY m.created_at DESC LIMIT 1
+          )`,
+        })
         .from(inquirySessions)
+        .leftJoin(users, eq(users.id, inquirySessions.userId))
         .where(whereClause)
         .orderBy(
           desc(inquirySessions.lastMessageAt),
@@ -60,17 +69,18 @@ export class InquiryService {
 
     const total = totalResult[0]?.count ?? 0;
     const items: InquirySession[] = rows.map((row) => ({
-      id: row.id,
-      sessionId: row.sessionId,
-      userId: row.userId ?? undefined,
-      status: (row.status as 'active' | 'closed') ?? 'active',
-      lastMessage: row.lastMessageAt
-        ? row.lastMessageAt.toISOString()
+      id: row.session.id,
+      sessionId: row.session.sessionId,
+      userId: row.session.userId ?? undefined,
+      userName: row.userName ?? undefined,
+      status: (row.session.status as 'active' | 'closed') ?? 'active',
+      // `lastMessage` is the message text, not a timestamp — the old code fed
+      // the timestamp here, which rendered an ISO date under every session.
+      lastMessage: row.lastMessage ?? undefined,
+      lastMessageAt: row.session.lastMessageAt
+        ? row.session.lastMessageAt.toISOString()
         : undefined,
-      lastMessageAt: row.lastMessageAt
-        ? row.lastMessageAt.toISOString()
-        : undefined,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: row.session.createdAt.toISOString(),
     }));
 
     return { items, total, page, pageSize };
@@ -182,9 +192,8 @@ export class InquiryService {
         sessionId: inserted.sessionId,
         userId: inserted.userId ?? undefined,
         status: (inserted.status as 'active' | 'closed') ?? 'active',
-        lastMessage: inserted.lastMessageAt
-          ? inserted.lastMessageAt.toISOString()
-          : undefined,
+        // A brand-new session has no messages yet.
+        lastMessage: undefined,
         lastMessageAt: inserted.lastMessageAt
           ? inserted.lastMessageAt.toISOString()
           : undefined,
@@ -206,9 +215,7 @@ export class InquiryService {
             sessionId: row.sessionId,
             userId: row.userId ?? undefined,
             status: (row.status as 'active' | 'closed') ?? 'active',
-            lastMessage: row.lastMessageAt
-              ? row.lastMessageAt.toISOString()
-              : undefined,
+            lastMessage: undefined,
             lastMessageAt: row.lastMessageAt
               ? row.lastMessageAt.toISOString()
               : undefined,

@@ -98,7 +98,7 @@ const BuyerLayout: React.FC = () => {
                 <SheetContent side="left" className="w-72 p-0">
                   <SheetHeader className="border-b px-4 py-3">
                     <SheetTitle className="text-left">
-                      <Image src={logoHorizontal} alt="Flow" className="h-7 w-auto object-contain" />
+                      <Image src={logoHorizontal} alt="Flow" className="h-7 w-auto max-w-[160px] object-contain" />
                     </SheetTitle>
                   </SheetHeader>
                   <div className="flex flex-col gap-1 p-3">
@@ -182,19 +182,19 @@ const BuyerLayout: React.FC = () => {
                   </div>
                 </SheetContent>
               </Sheet>
-              <Link to="/" className="flex items-center gap-2">
+              <Link to="/" className="flex shrink-0 items-center gap-2">
                 <Image
                   src={logoHorizontal}
                   alt="Flow"
-                  className="h-9 w-auto object-contain"
+                  className="h-8 w-auto max-w-[130px] object-contain sm:h-9 sm:max-w-none"
                 />
               </Link>
-              <nav className="hidden md:flex items-center gap-6">
+              <nav className="hidden md:flex items-center gap-6 py-2">
                 <NavLink
                   to="/"
                   end
                   className={({ isActive }) =>
-                    `text-sm font-medium transition-colors ${
+                    `inline-flex items-center py-1.5 text-sm font-medium transition-colors ${
                       isActive ? 'text-[var(--flow-ink)]' : 'text-slate-600 hover:text-[var(--flow-ink)]'
                     }`
                   }
@@ -204,7 +204,7 @@ const BuyerLayout: React.FC = () => {
                 <NavLink
                   to="/products"
                   className={({ isActive }) =>
-                    `text-sm font-medium transition-colors ${
+                    `inline-flex items-center py-1.5 text-sm font-medium transition-colors ${
                       isActive ? 'text-[var(--flow-ink)]' : 'text-slate-600 hover:text-[var(--flow-ink)]'
                     }`
                   }
@@ -379,10 +379,10 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '购物指南' : language === 'es' ? 'Guía de Compra' : language === 'pt' ? 'Guia de Compras' : 'Shopping Guide'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li><Link to="/page/how-to-order" className="hover:text-white transition-colors">{language === 'zh' ? '如何下单' : language === 'es' ? 'Cómo Pedir' : language === 'pt' ? 'Como Pedir' : 'How to Order'}</Link></li>
-                 <li><Link to="/page/payment-methods" className="hover:text-white transition-colors">{language === 'zh' ? '支付方式' : language === 'es' ? 'Métodos de Pago' : language === 'pt' ? 'Formas de Pagamento' : 'Payment Methods'}</Link></li>
-                 <li><Link to="/page/shipping-info" className="hover:text-white transition-colors">{language === 'zh' ? '配送说明' : language === 'es' ? 'Información de Envío' : language === 'pt' ? 'Informações de Entrega' : 'Shipping Info'}</Link></li>
-                 <li><Link to="/page/returns" className="hover:text-white transition-colors">{language === 'zh' ? '退换货政策' : language === 'es' ? 'Política de Devoluciones' : language === 'pt' ? 'Política de Devolução' : 'Return Policy'}</Link></li>
+                 <li><Link to="/page/how-to-order" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '如何下单' : language === 'es' ? 'Cómo Pedir' : language === 'pt' ? 'Como Pedir' : 'How to Order'}</Link></li>
+                 <li><Link to="/page/payment-methods" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '支付方式' : language === 'es' ? 'Métodos de Pago' : language === 'pt' ? 'Formas de Pagamento' : 'Payment Methods'}</Link></li>
+                 <li><Link to="/page/shipping-info" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '配送说明' : language === 'es' ? 'Información de Envío' : language === 'pt' ? 'Informações de Entrega' : 'Shipping Info'}</Link></li>
+                 <li><Link to="/page/returns" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '退换货政策' : language === 'es' ? 'Política de Devoluciones' : language === 'pt' ? 'Política de Devolução' : 'Return Policy'}</Link></li>
                </ul>
              </div>
              <div>
@@ -390,9 +390,9 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '客户服务' : language === 'es' ? 'Atención al Cliente' : language === 'pt' ? 'Atendimento ao Cliente' : 'Customer Service'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li><Link to="/page/help" className="hover:text-white transition-colors">{language === 'zh' ? '帮助中心' : language === 'es' ? 'Centro de Ayuda' : language === 'pt' ? 'Central de Ajuda' : 'Help Center'}</Link></li>
-                 <li><Link to="/page/contact" className="hover:text-white transition-colors">{language === 'zh' ? '联系我们' : language === 'es' ? 'Contáctanos' : language === 'pt' ? 'Fale Conosco' : 'Contact Us'}</Link></li>
-                 <li><Link to="/page/faq" className="hover:text-white transition-colors">{language === 'zh' ? '常见问题' : language === 'es' ? 'Preguntas Frecuentes' : language === 'pt' ? 'Perguntas Frequentes' : 'FAQ'}</Link></li>
+                 <li><Link to="/page/help" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '帮助中心' : language === 'es' ? 'Centro de Ayuda' : language === 'pt' ? 'Central de Ajuda' : 'Help Center'}</Link></li>
+                 <li><Link to="/page/contact" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '联系我们' : language === 'es' ? 'Contáctanos' : language === 'pt' ? 'Fale Conosco' : 'Contact Us'}</Link></li>
+                 <li><Link to="/page/faq" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '常见问题' : language === 'es' ? 'Preguntas Frecuentes' : language === 'pt' ? 'Perguntas Frequentes' : 'FAQ'}</Link></li>
                </ul>
              </div>
              <div>
@@ -400,10 +400,10 @@ const BuyerLayout: React.FC = () => {
                   {language === 'zh' ? '关于我们' : language === 'es' ? 'Sobre Nosotros' : language === 'pt' ? 'Sobre Nós' : 'About Us'}
                </h4>
                <ul className="space-y-2 text-sm">
-                 <li><Link to="/page/about" className="hover:text-white transition-colors">{language === 'zh' ? '公司介绍' : language === 'es' ? 'About Flow' : language === 'pt' ? 'Sobre a Flow' : 'About Flow'}</Link></li>
-                 <li><Link to="/register?role=seller" className="hover:text-white transition-colors">{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Sell on Flow' : language === 'pt' ? 'Sell on Flow' : 'Sell on Flow'}</Link></li>
-                 <li><Link to="/page/privacy" className="hover:text-white transition-colors">{language === 'zh' ? '隐私政策' : language === 'es' ? 'Política de Privacidad' : language === 'pt' ? 'Política de Privacidade' : 'Privacy Policy'}</Link></li>
-                 <li><Link to="/page/terms" className="hover:text-white transition-colors">{language === 'zh' ? '服务条款' : language === 'es' ? 'Términos de Servicio' : language === 'pt' ? 'Termos de Serviço' : 'Terms of Service'}</Link></li>
+                 <li><Link to="/page/about" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '公司介绍' : language === 'es' ? 'About Flow' : language === 'pt' ? 'Sobre a Flow' : 'About Flow'}</Link></li>
+                 <li><Link to="/register?role=seller" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '卖家入驻' : language === 'es' ? 'Sell on Flow' : language === 'pt' ? 'Sell on Flow' : 'Sell on Flow'}</Link></li>
+                 <li><Link to="/page/privacy" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '隐私政策' : language === 'es' ? 'Política de Privacidad' : language === 'pt' ? 'Política de Privacidade' : 'Privacy Policy'}</Link></li>
+                 <li><Link to="/page/terms" className="inline-block py-1 hover:text-white transition-colors">{language === 'zh' ? '服务条款' : language === 'es' ? 'Términos de Servicio' : language === 'pt' ? 'Termos de Serviço' : 'Terms of Service'}</Link></li>
                </ul>
              </div>
           </div>

@@ -112,7 +112,10 @@ const RegisterPage: React.FC = () => {
               autoComplete="new-password"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <label
+            htmlFor="asSeller"
+            className="flex min-h-6 cursor-pointer items-center gap-2 py-1"
+          >
             <input
               id="asSeller"
               type="checkbox"
@@ -120,10 +123,8 @@ const RegisterPage: React.FC = () => {
               onChange={(e) => setAsSeller(e.target.checked)}
               className="size-4 accent-[var(--flow-accent)]"
             />
-            <Label htmlFor="asSeller" className="text-sm text-slate-600">
-              我是卖家（需要邀请码）
-            </Label>
-          </div>
+            <span className="text-sm text-slate-600">我是卖家（需要邀请码）</span>
+          </label>
           {asSeller && (
             <div className="space-y-2">
               <Label htmlFor="sellerCode">卖家邀请码</Label>
@@ -156,7 +157,7 @@ const RegisterPage: React.FC = () => {
 
         <div className="mt-6 text-center text-sm text-slate-500">
           {t.auth.haveAccount}{' '}
-          <Link to="/login" className="text-[var(--flow-accent)] hover:underline font-medium">
+          <Link to="/login" className="inline-flex items-center py-1 text-[var(--flow-accent)] hover:underline font-medium">
             {t.auth.signIn}
           </Link>
         </div>

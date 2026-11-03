@@ -153,7 +153,7 @@ const InquiryManagePage: React.FC = () => {
             </div>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
             {loadingSessions && (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 加载中...
@@ -175,11 +175,11 @@ const InquiryManagePage: React.FC = () => {
                       : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm">
-                      {session.userId}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {session.userName ?? '访客'}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {formatDate(session.lastMessageAt)}
                     </span>
                   </div>
@@ -210,8 +210,13 @@ const InquiryManagePage: React.FC = () => {
           {/* 聊天头部 */}
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div>
-              <div className="font-semibold">
-                {selectedSession?.userId || '选择会话'}
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-semibold">
+                <span className="truncate">{selectedSession?.userName ?? '访客'}</span>
+                {selectedSession?.sessionId && (
+                  <span className="shrink-0 font-mono text-[11px] font-normal text-slate-400">
+                    #{selectedSession.sessionId.slice(0, 8)}
+                  </span>
+                )}
               </div>
               <div className="text-xs text-muted-foreground">
                 {selectedSession?.status === 'active'
@@ -222,7 +227,7 @@ const InquiryManagePage: React.FC = () => {
           </div>
 
           {/* 消息列表 */}
-          <ScrollArea className="flex-1 bg-slate-50">
+          <ScrollArea className="min-h-0 min-w-0 flex-1 bg-slate-50">
             {loadingMessages && (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 加载中...
@@ -233,7 +238,7 @@ const InquiryManagePage: React.FC = () => {
                 {selectedSessionId ? '暂无消息' : '请选择会话'}
               </div>
             )}
-            <div className="space-y-3 p-4">
+            <div className="w-full min-w-0 space-y-3 p-4">
               {messages.map((msg) => {
                 const isUser = msg.role === 'user';
                 const isSeller = msg.role === 'seller';
@@ -245,7 +250,7 @@ const InquiryManagePage: React.FC = () => {
                     className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`flex max-w-[75%] gap-2 ${
+                      className={`flex min-w-0 max-w-[75%] gap-2 ${
                         isUser ? 'flex-row-reverse' : 'flex-row'
                       }`}
                     >
@@ -269,9 +274,9 @@ const InquiryManagePage: React.FC = () => {
                       </div>
 
                       {/* 消息气泡 */}
-                      <div>
+                      <div className="min-w-0">
                         <div
-                          className={`rounded-lg px-3 py-2 text-sm ${
+                          className={`break-words rounded-lg px-3 py-2 text-sm ${
                             isUser
                               ? 'bg-blue-800 text-white'
                               : 'bg-white text-slate-800 border border-slate-200'
