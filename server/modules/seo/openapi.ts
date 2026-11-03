@@ -45,7 +45,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: 'Flow — AI-Native Cross-Border Commerce API',
-      version: '1.21.1',
+      version: '1.22.0',
       description:
         'Buyer storefront + seller AI workbench. All state-changing browser requests require the X-Requested-With: XMLHttpRequest header (CSRF). Authentication uses an HttpOnly JWT cookie.',
       license: { name: 'MIT' },

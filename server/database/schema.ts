@@ -540,7 +540,8 @@ export const aiReports = pgTable('ai_reports', {
 // 模型配置（键值对：llm_base_url / llm_api_key / llm_model）。
 // 优先级：数据库（UI 设置）> 环境变量 > 未配置（诚实提示）。
 export const aiSettings = pgTable('ai_settings', {
-  key: varchar('key', { length: 50 }).primaryKey(),
+  // 120：容纳卖家作用域键 `{uuid36}:{key}`（最长 copilot_watch_last_snapshot 共 64 字符）
+  key: varchar('key', { length: 120 }).primaryKey(),
   value: text('value').notNull(),
   updatedBy: uuid('updated_by'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

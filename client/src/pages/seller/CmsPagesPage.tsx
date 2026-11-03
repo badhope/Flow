@@ -49,6 +49,7 @@ import type {
   UpdateCmsPageRequest,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 const PAGE_SIZE = 10;
 
@@ -185,17 +186,17 @@ const CmsPagesPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-slate-900">CMS 页面管理</h2>
-        </div>
-        <Button size="sm" onClick={handleCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          创建页面
-        </Button>
-      </div>
+      <SellerPageHeader
+        eyebrow={'Content'}
+        title={'CMS 页面'}
+        description={'About / FAQ / 政策等静态内容，支持多语言富文本。'}
+        actions={
+          <Button size="sm" onClick={handleCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            创建页面
+          </Button>
+        }
+      />
 
       {/* Filter */}
       <Card className="shadow-sm">
@@ -231,8 +232,7 @@ const CmsPagesPage: React.FC = () => {
                 <TableHead>标题</TableHead>
                 <TableHead>标识</TableHead>
                 <TableHead>状态</TableHead>
-                <TableHead>公开</TableHead>
-                <TableHead>浏览量</TableHead>
+                <TableHead>已发布</TableHead>
                 <TableHead>更新时间</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
@@ -240,12 +240,12 @@ const CmsPagesPage: React.FC = () => {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">加载中...</TableCell>
+                  <TableCell colSpan={6} className="text-center py-8">加载中...</TableCell>
                 </TableRow>
               )}
               {!loading && pages.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-0">
+                  <TableCell colSpan={6} className="py-0">
                     <Empty>
                       <EmptyHeader>
                         <EmptyMedia variant="icon"><FileText className="size-6" /></EmptyMedia>

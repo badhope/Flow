@@ -74,6 +74,15 @@ const CATEGORIES = [
 
 try {
   // ---------- 清理上次演示数据 ----------
+  // Order matters: children first, otherwise the product delete trips the
+  // order_items foreign key on a second run.
+  await sql`DELETE FROM refunds WHERE order_id IN (SELECT id FROM orders WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
+  await sql`DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
+  await sql`DELETE FROM order_notes WHERE order_id IN (SELECT id FROM orders WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
+  await sql`DELETE FROM orders WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com')`;
+  await sql`DELETE FROM reviews WHERE product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
+  await sql`DELETE FROM favorites WHERE product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
+  await sql`DELETE FROM cart_items WHERE product_id IN (SELECT id FROM products WHERE seller_id IN (SELECT id FROM users WHERE email = 'seller@example.com'))`;
   await sql`DELETE FROM collection_products WHERE collection_id IN (SELECT id FROM collections WHERE slug LIKE ${'demo-%'})`;
   await sql`DELETE FROM collections WHERE slug LIKE ${'demo-%'}`;
   await sql`DELETE FROM cms_pages WHERE slug IN ('about','faq','privacy','terms','shipping-info','returns','payment-methods','how-to-order','help','contact','demo-faq')`;
@@ -125,6 +134,9 @@ try {
 
   // ---------- 运费模板 ----------
   await sql`DELETE FROM shipping_templates WHERE name = '标准跨境运费'`;
+  // Only one template may be the default per seller; the bootstrap seed already
+  // creates one, so demote it before adding the demo template.
+  await sql`UPDATE shipping_templates SET is_default = false WHERE seller_id = ${sellerId}`;
   await sql`
     INSERT INTO shipping_templates (seller_id, name, free_shipping_threshold, base_fee, extra_fee_per_unit, unit_type, is_default, special_zones)
     VALUES (${sellerId}, '标准跨境运费', '100.00', '5.00', '2.00', 'quantity', true,
@@ -145,11 +157,13 @@ try {
     { slug: 'demo-home', zh: '居家焕新', en: 'Home Refresh', dzh: '用细节提升居家质感', den: 'Small details, better living', keys: ['cushion', 'lamp'], featured: true, sort: 1 },
     { slug: 'demo-hot', zh: '本周热销榜', en: 'Best Sellers This Week', dzh: '真实销量排行，跟着买不出错', den: 'Ranked by real sales', keys: ['bottle', 'speaker', 'cup'], featured: true, sort: 2 },
   ];
+  const collectionIds = {};
   for (const c of COLLECTIONS) {
     const [row] = await sql`
       INSERT INTO collections (seller_id, title_zh, title_en, slug, description_zh, description_en, is_featured, sort_order, status)
       VALUES (${sellerId}, ${c.zh}, ${c.en}, ${c.slug}, ${c.dzh}, ${c.den}, ${c.featured}, ${c.sort}, 'active')
       RETURNING id`;
+    collectionIds[c.slug] = row.id;
     for (const [i, key] of c.keys.entries()) {
       await sql`
         INSERT INTO collection_products (collection_id, product_id, sort_order)
@@ -307,17 +321,20 @@ try {
 
   // ---------- 审计日志（审计页有内容）----------
   await sql`DELETE FROM audit_logs WHERE user_id = ${sellerId} AND action LIKE 'demo.%'`;
+  // Resolve real ids so the audit list shows a navigable target, not "-".
+  const [couponRow] = await sql`SELECT id FROM coupons WHERE code = 'WELCOME10' LIMIT 1`;
+  const [orderRow] = await sql`SELECT id FROM orders WHERE seller_id = ${sellerId} ORDER BY created_at DESC LIMIT 1`;
   const AUDITS = [
-    ['demo.product_create', 'product', '创建商品 便携折叠水杯 500ml'],
-    ['demo.product_update', 'product', '更新商品价格 12.90 → 11.90'],
-    ['demo.order_status_change', 'order', '订单状态 pending_payment → paid'],
-    ['demo.coupon_create', 'coupon', '创建优惠券 WELCOME10'],
-    ['demo.collection_create', 'collection', '创建集合 夏日出行精选'],
+    ['demo.product_create', 'product', productIds.cup, '创建商品 便携折叠水杯 500ml'],
+    ['demo.product_update', 'product', productIds.bottle, '更新商品价格 12.90 → 11.90'],
+    ['demo.order_status_change', 'order', orderRow?.id, '订单状态 pending_payment → paid'],
+    ['demo.coupon_create', 'coupon', couponRow?.id, '创建优惠券 WELCOME10'],
+    ['demo.collection_create', 'collection', collectionIds['demo-summer'], '创建集合 夏日出行精选'],
   ];
-  for (const [action, entity, _note] of AUDITS) {
+  for (const [action, entity, entityId, _note] of AUDITS) {
     await sql`
-      INSERT INTO audit_logs (user_id, role, action, entity, before, after, ip_address, created_at)
-      VALUES (${sellerId}, 'seller', ${action}, ${entity}, ${null}, ${JSON.stringify({ note: _note })}, '203.0.113.10', now() - interval '1 day')`;
+      INSERT INTO audit_logs (user_id, role, action, entity, entity_id, before, after, ip_address, created_at)
+      VALUES (${sellerId}, 'seller', ${action}, ${entity}, ${entityId ?? null}, ${null}, ${JSON.stringify({ note: _note })}, '203.0.113.10', now() - interval '1 day')`;
   }
 
   console.log('[seed-demo] 评价 / 咨询 / 地址 / 收藏 / 购物车 / 审计 已写入');

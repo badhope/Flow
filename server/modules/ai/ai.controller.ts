@@ -5,6 +5,7 @@ import { aiReports } from '../../database/schema';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { buildOwnerVisibilityCondition, andOptional, type SellerActor } from './seller-scope';
 import { AiGatewayService } from './ai-gateway.service';
 import { CopywriterService } from './copywriter.service';
 import { SupportService } from './support.service';
@@ -50,13 +51,19 @@ export class AiController {
     private readonly translationService: TranslationService,
   ) {}
 
+  private getActor(req?: Request): SellerActor {
+    return { userId: req?.user?.id, role: req?.user?.role };
+  }
+
   @Get('status')
-  async getStatus(): Promise<AIStatusResponse> {
-    const config = await this.aiGateway.resolveConfig();
+  async getStatus(@Req() req: Request): Promise<AIStatusResponse> {
+    const config = await this.aiGateway.resolveConfig(this.getActor(req));
+    const isAuthenticated = Boolean(req.user?.id);
     return {
       configured: config.apiKey.length > 0,
-      model: config.apiKey.length > 0 ? config.model : undefined,
-      source: config.source,
+      // 匿名买家只需要知道导购是否可用；不暴露模型供应商/配置来源。
+      model: isAuthenticated && config.apiKey.length > 0 ? config.model : undefined,
+      source: isAuthenticated ? config.source : config.apiKey.length > 0 ? undefined : 'none',
     };
   }
 
@@ -66,13 +73,18 @@ export class AiController {
     @Query('agent') agent?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Req() req?: Request,
   ): Promise<UsageStatsResponse> {
-    return this.aiGateway.getUsageStats({ agent, startDate, endDate });
+    return this.aiGateway.getUsageStats({ agent, startDate, endDate, actor: this.getActor(req) });
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('reports')
-  async listReports(@Query('type') type?: string): Promise<AIReportSummary[]> {
+  async listReports(
+    @Query('type') type?: string,
+    @Req() req?: Request,
+  ): Promise<AIReportSummary[]> {
+    const actor = this.getActor(req);
     const rows = await this.db
       .select({
         id: aiReports.id,
@@ -82,7 +94,10 @@ export class AiController {
         createdAt: aiReports.createdAt,
       })
       .from(aiReports)
-      .where(type ? eq(aiReports.reportType, type) : undefined)
+      .where(andOptional(
+        type ? eq(aiReports.reportType, type) : undefined,
+        buildOwnerVisibilityCondition(aiReports.userId, actor),
+      ))
       .orderBy(desc(aiReports.createdAt))
       .limit(20);
 
@@ -97,11 +112,15 @@ export class AiController {
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Get('reports/:id')
-  async getReport(@Param('id') id: string): Promise<AIReportDetail> {
+  async getReport(@Param('id') id: string, @Req() req: Request): Promise<AIReportDetail> {
+    const actor = this.getActor(req);
     const rows = await this.db
       .select()
       .from(aiReports)
-      .where(eq(aiReports.id, id));
+      .where(andOptional(
+        eq(aiReports.id, id),
+        buildOwnerVisibilityCondition(aiReports.userId, actor),
+      ));
     if (rows.length === 0) {
       throw new NotFoundException('报告不存在');
     }
@@ -122,8 +141,7 @@ export class AiController {
     @Body() dto: CopywriterDto,
     @Req() req: Request,
   ): Promise<AICopywriterResponse> {
-    const userId = req.user?.id;
-    return this.copywriterService.generate(dto, userId);
+    return this.copywriterService.generate(dto, this.getActor(req));
   }
 
   // 公开端点（买家用）：额外限流收紧到 10/min 每 IP，防止匿名消耗 LLM 配额
@@ -133,23 +151,26 @@ export class AiController {
     @Body() dto: SupportChatDto,
     @Req() req: Request,
   ): Promise<SupportChatResponse> {
-    const userId = req.user?.id;
-    return this.supportService.chat(dto, userId);
+    const rawSession = req.headers['x-session-id'];
+    const sessionId = Array.isArray(rawSession) ? rawSession[0] : rawSession;
+    return this.supportService.chat(dto, {
+      ...this.getActor(req),
+      sessionId: typeof sessionId === 'string' ? sessionId : undefined,
+    });
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Post('trend/generate')
   async generateTrend(@Req() req: Request): Promise<AITrendReport> {
-    const userId = req.user?.id;
-    if (!userId) throw new BadRequestException('用户未登录');
-    return this.trendService.generateTrendReport(userId);
+    const actor = this.getActor(req);
+    if (!actor.userId) throw new BadRequestException('用户未登录');
+    return this.trendService.generateTrendReport(actor);
   }
 
   @UseGuards(new RolesGuard(['seller', 'admin']))
   @Post('select/generate')
   async generateSelect(@Req() req: Request): Promise<AISelectResponse> {
-    const userId = req.user?.id;
-    return this.selectService.selectProducts(userId);
+    return this.selectService.selectProducts(this.getActor(req));
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -158,7 +179,6 @@ export class AiController {
     @Body() dto: TranslationDto,
     @Req() req: Request,
   ): Promise<AITranslationResponse> {
-    const userId = req.user?.id;
-    return this.translationService.translate(dto, userId);
+    return this.translationService.translate(dto, this.getActor(req));
   }
 }

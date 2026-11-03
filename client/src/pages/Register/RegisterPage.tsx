@@ -62,7 +62,7 @@ const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0B1F3A] via-[#0f2a4a] to-[#0B1F3A] py-12 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#07080B] via-[#12161F] to-[#07080B] py-12 px-4">
       <Card className="w-full max-w-md p-8">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
@@ -112,18 +112,19 @@ const RegisterPage: React.FC = () => {
               autoComplete="new-password"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <label
+            htmlFor="asSeller"
+            className="flex min-h-6 cursor-pointer items-center gap-2 py-1"
+          >
             <input
               id="asSeller"
               type="checkbox"
               checked={asSeller}
               onChange={(e) => setAsSeller(e.target.checked)}
-              className="size-4 accent-[#00C2B8]"
+              className="size-4 accent-[var(--flow-accent)]"
             />
-            <Label htmlFor="asSeller" className="text-sm text-slate-600">
-              我是卖家（需要邀请码）
-            </Label>
-          </div>
+            <span className="text-sm text-slate-600">我是卖家（需要邀请码）</span>
+          </label>
           {asSeller && (
             <div className="space-y-2">
               <Label htmlFor="sellerCode">卖家邀请码</Label>
@@ -156,7 +157,7 @@ const RegisterPage: React.FC = () => {
 
         <div className="mt-6 text-center text-sm text-slate-500">
           {t.auth.haveAccount}{' '}
-          <Link to="/login" className="text-[#00C2B8] hover:underline font-medium">
+          <Link to="/login" className="inline-flex items-center py-1 text-[var(--flow-accent)] hover:underline font-medium">
             {t.auth.signIn}
           </Link>
         </div>

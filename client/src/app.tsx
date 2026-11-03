@@ -7,7 +7,6 @@ import BuyerLayout from './components/BuyerLayout';
 import SellerLayout from './components/SellerLayout';
 import SellerRouteGuard from './components/SellerRouteGuard';
 import HomePage from './pages/Home/HomePage';
-import ChatWidget from './components/ChatWidget';
 import { reportVisitOnce } from './lib/visit-beacon';
 
 const ProductListPage = lazy(() => import('./pages/ProductList/ProductListPage'));
@@ -95,7 +94,6 @@ const RoutesComponent = () => {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
-        <ChatWidget />
         <Toaster position="top-right" />
       </AuthProvider>
     </LanguageProvider>

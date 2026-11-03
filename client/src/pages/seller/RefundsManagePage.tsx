@@ -38,6 +38,7 @@ import { getSellerRefunds, approveRefund, rejectRefund } from '@/api/refunds';
 import type { Refund, RefundListParams } from '@shared/api.interface';
 import { toast } from 'sonner';
 import { notifyError } from '@/lib/error-feedback';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 type RefundStatus = Refund['status'];
 
@@ -158,6 +159,11 @@ const RefundsManagePage: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <SellerPageHeader
+        eyebrow={'Refunds'}
+        title={'退款管理'}
+        description={'审批原路退回、拒绝申请；并发审批有原子抢占，防止重复打款。'}
+      />
       {/* 筛选 */}
       <Card className="shadow-sm">
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
@@ -235,7 +241,7 @@ const RefundsManagePage: React.FC = () => {
                 refunds.map((refund) => (
                   <TableRow key={refund.id}>
                     <TableCell className="font-mono text-xs">{refund.refundNo}</TableCell>
-                    <TableCell className="font-mono text-xs">{refund.orderId}</TableCell>
+                    <TableCell className="font-mono text-xs">{refund.orderNo ?? refund.orderId}</TableCell>
                     <TableCell className="font-semibold">${refund.amount}</TableCell>
                     <TableCell className="text-sm">
                       {REASON_MAP[refund.reason] || refund.reason}
@@ -318,7 +324,7 @@ const RefundsManagePage: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 rounded-lg border bg-slate-50 p-4 text-sm">
                 <div><span className="text-muted-foreground">退款单号：</span><span className="font-mono">{selectedRefund.refundNo}</span></div>
-                <div><span className="text-muted-foreground">订单号：</span><span className="font-mono">{selectedRefund.orderId}</span></div>
+                <div><span className="text-muted-foreground">订单号：</span><span className="font-mono">{selectedRefund.orderNo ?? selectedRefund.orderId}</span></div>
                 <div><span className="text-muted-foreground">退款金额：</span><span className="font-semibold text-blue-800">${selectedRefund.amount}</span></div>
                 <div><span className="text-muted-foreground">退款方式：</span>{selectedRefund.refundMethod === 'original' ? '原路返回' : '退至余额'}</div>
                 <div><span className="text-muted-foreground">退款原因：</span>{REASON_MAP[selectedRefund.reason] || selectedRefund.reason}</div>

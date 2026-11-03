@@ -5,6 +5,13 @@ import * as SwitchPrimitive from "@radix-ui/react-switch"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Switch with a 24px-tall hit area and a compact visual track.
+ *
+ * The Radix root is a transparent 32x24 button; the visible pill is drawn by
+ * the `::before` layer so the control meets the WCAG 2.2 target size rule while
+ * keeping the original 32x18 look. The thumb is positioned inside that pill.
+ */
 function Switch({
   className,
   ...props
@@ -13,7 +20,10 @@ function Switch({
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/20 dark:data-[state=unchecked]:bg-input/80 inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:data-state:bg-muted",
+        "peer relative inline-flex h-6 w-8 shrink-0 cursor-pointer items-center rounded-full outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        "before:pointer-events-none before:absolute before:inset-x-0 before:top-1/2 before:h-[18px] before:-translate-y-1/2 before:rounded-full before:border before:border-transparent before:transition-colors",
+        "data-[state=unchecked]:before:bg-input data-[state=checked]:before:bg-primary",
+        "focus-visible:ring-[3px] focus-visible:ring-ring/25",
         className
       )}
       {...props}
@@ -21,7 +31,9 @@ function Switch({
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
         className={cn(
-          "bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block size-4 rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0 data-disabled:opacity-60"
+          "relative z-10 ml-[2px] block size-4 rounded-full bg-background ring-0 transition-transform",
+          "data-[state=checked]:translate-x-[10px] data-[state=unchecked]:translate-x-0",
+          "dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground data-disabled:opacity-60"
         )}
       />
     </SwitchPrimitive.Root>

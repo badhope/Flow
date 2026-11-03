@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { AiGatewayService } from './ai-gateway.service';
 import { parseLlmJson } from './llm-json';
+import { buildSellerScopeCondition, andOptional, type SellerActor } from './seller-scope';
 import { products, productVariants, categories, shopperEvents } from '../../database/schema';
 import type { AISelectResponse } from '../../../shared/api.interface';
 
@@ -13,12 +14,30 @@ export class SelectService {
     private readonly aiGateway: AiGatewayService,
   ) {}
 
-  async selectProducts(userId?: string): Promise<AISelectResponse> {
+  async selectProducts(actor: SellerActor): Promise<AISelectResponse> {
+    // 空店铺提前返回仅用于「已配置模型」的卖家——省一次无意义的 LLM 调用。
+    // 未配置模型时必须走完整链路：gateway.chat 会如实落 ai_usage_log(success=false)
+    // 再抛 400（诚实降级 + 可观测），绝不静默返回空数组冒充「无推荐」。
+    const configured = await this.aiGateway.isConfigured({ userId: actor.userId, role: actor.role });
     const allCategories = await this.db.select({
       id: categories.id,
       nameZh: categories.nameZh,
       nameEn: categories.nameEn,
     }).from(categories);
+
+    // 本店在售商品 id（seller 范围内；admin 全平台）
+    const sellerProductIds = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(andOptional(
+        eq(products.status, 'active'),
+        buildSellerScopeCondition(products.sellerId, actor),
+      ));
+    const scopedIds = sellerProductIds.map((row) => row.id);
+
+    if (scopedIds.length === 0 && configured) {
+      return { items: [] };
+    }
 
     // Aggregate variant data per product for sold/price/stock
     const variantAgg = await this.db
@@ -29,7 +48,10 @@ export class SelectService {
         minPrice: sql<string>`MIN(${productVariants.price})::text`,
       })
       .from(productVariants)
-      .where(eq(productVariants.status, 'active'))
+      .where(and(
+        eq(productVariants.status, 'active'),
+        inArray(productVariants.productId, scopedIds),
+      ))
       .groupBy(productVariants.productId)
       .orderBy(desc(sql`COALESCE(SUM(${productVariants.sold}), 0)`))
       .limit(20);
@@ -40,7 +62,7 @@ export class SelectService {
       ? await this.db
         .select({ id: products.id, titleEn: products.titleEn, categoryId: products.categoryId })
         .from(products)
-        .where(eq(products.status, 'active'))
+        .where(and(eq(products.status, 'active'), inArray(products.id, productIds)))
       : [];
 
     const productMap = new Map(productRows.map((p) => [p.id, p]));
@@ -62,7 +84,7 @@ export class SelectService {
     const systemPrompt = '你是专业的跨境电商选品专家，擅长基于销售数据和市场趋势给出选品建议。请用中文输出严格的 JSON 格式。';
 
     // 真实需求信号：买家在导购里搜了但店里没有的词（查不到就静默降级，不影响选品）
-    const demandGapSection = await this.buildDemandGapSection();
+    const demandGapSection = await this.buildDemandGapSection(actor);
 
     const userPrompt = `基于以下店铺现有类目和销售数据，推荐 5-8 个值得上架的细分品。
 
@@ -93,7 +115,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId },
+      { temperature: 0.8, maxTokens: 2000, responseFormat: 'json', agent: 'select', userId: actor.userId, role: actor.role },
     );
 
     const parsed = parseLlmJson<AISelectResponse>(content);
@@ -103,7 +125,7 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
   }
 
   /** 近 90 天导购零结果搜索 → 提示词段落；无数据/查询失败时返回空串 */
-  private async buildDemandGapSection(): Promise<string> {
+  private async buildDemandGapSection(actor: SellerActor): Promise<string> {
     try {
       const since = new Date(Date.now() - 90 * 24 * 3600 * 1000);
       const rows = await this.db
@@ -118,6 +140,11 @@ confidence 是 0-1 之间的数字，表示推荐置信度。
           gte(shopperEvents.createdAt, since),
           sql`${shopperEvents.keyword} IS NOT NULL`,
           sql`${shopperEvents.keyword} <> ''`,
+          ...(actor.role === 'admin'
+            ? []
+            : [actor.userId
+              ? sql`${shopperEvents.productId} IN (SELECT id FROM ${products} WHERE seller_id = ${actor.userId})`
+              : sql`FALSE`]),
         ))
         .groupBy(shopperEvents.keyword)
         .orderBy(sql`COUNT(*) DESC`)

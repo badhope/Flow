@@ -32,6 +32,7 @@ import { createLogistics } from '@/api/logistics';
 import type { Order, OrderStatus, OrderListParams } from '@shared/api.interface';
 import { toast } from 'sonner';
 import { notifyError } from '@/lib/error-feedback';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 const STATUS_MAP: Record<OrderStatus, { label: string; variant: string; color: string }> = {
   pending_payment: { label: '待付款', variant: 'secondary', color: 'text-amber-600' },
@@ -184,6 +185,11 @@ const OrderManagePage: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <SellerPageHeader
+        eyebrow={'Orders'}
+        title={'订单管理'}
+        description={'按状态筛选、查看详情、批量发货与物流登记；卖家仅见本店订单。'}
+      />
       {/* 顶部筛选 */}
       <Card className="shadow-sm">
         <CardContent className="flex flex-wrap items-center gap-3 p-4">

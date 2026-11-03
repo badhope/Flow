@@ -1,9 +1,12 @@
 import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { eq, and, gte, lte, count, sum } from 'drizzle-orm';
+import { eq, and, gte, lte, count, sum, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
+import { enforcePublicOutbound, isSafePublicHttpUrl, publicOutboundAgents } from '../../common/http/url-guard';
 import { aiSettings, aiUsageLog } from '../../database/schema';
+import { isPlatformAdmin } from '../../common/tenant/tenant-scope';
+import type { SellerActor } from './seller-scope';
 import {
   LLM_NOT_CONFIGURED_MESSAGE,
   buildChatCompletionsUrl,
@@ -61,37 +64,54 @@ export class AiGatewayService {
   /**
    * 每次调用时解析配置（UI 设置 > 环境变量），设置保存后立即生效、无需重启。
    * 配置为单行级查询，相对 LLM 调用延迟可忽略。
+   * 作用域（切片 2）：传 userId 且非 admin → 读 `{userId}:llm_*` 作用域键；
+   * 卖家无作用域配置时回退环境变量，绝不串用其他卖家的 DB 配置。
    */
-  async resolveConfig(): Promise<ResolvedLlmConfig> {
+  async resolveConfig(forUser?: { userId?: string; role?: string }): Promise<ResolvedLlmConfig> {
+    const scoped = forUser?.userId && forUser.role !== 'admin';
     const rows = await this.db.select().from(aiSettings);
     const dbConfig: LlmDbConfig = {};
+    const prefix = scoped ? `${forUser!.userId}:` : '';
     for (const row of rows) {
-      if (row.key === 'llm_base_url') dbConfig.baseUrl = row.value;
-      else if (row.key === 'llm_api_key') dbConfig.apiKey = row.value;
-      else if (row.key === 'llm_model') dbConfig.model = row.value;
+      if (scoped && !row.key.startsWith(prefix)) continue;
+      const bareKey = scoped ? row.key.slice(prefix.length) : row.key;
+      if (bareKey === 'llm_base_url') dbConfig.baseUrl = row.value;
+      else if (bareKey === 'llm_api_key') dbConfig.apiKey = row.value;
+      else if (bareKey === 'llm_model') dbConfig.model = row.value;
     }
-    return resolveLlmConfig(dbConfig, process.env);
+    const resolved = resolveLlmConfig(dbConfig, process.env);
+    if (
+      resolved.baseUrlSource === 'db'
+      && enforcePublicOutbound()
+      && resolved.apiKey
+      && !isSafePublicHttpUrl(buildChatCompletionsUrl(resolved.baseUrl))
+    ) {
+      throw new BadRequestException(
+        '模型 Base URL 不可用：禁止指向内网/保留地址（SSRF 防护）。请在「模型设置」中改为公网地址',
+      );
+    }
+    return resolved;
   }
 
-  async isConfigured(): Promise<boolean> {
-    const config = await this.resolveConfig();
+  async isConfigured(forUser?: { userId?: string; role?: string }): Promise<boolean> {
+    const config = await this.resolveConfig(forUser);
     return config.apiKey.length > 0;
   }
 
-  async getModel(): Promise<string> {
-    const config = await this.resolveConfig();
+  async getModel(forUser?: { userId?: string; role?: string }): Promise<string> {
+    const config = await this.resolveConfig(forUser);
     return config.model;
   }
 
   async chat(
     messages: ChatMessage[],
-    options?: ChatOptions & { agent?: string; userId?: string },
+    options?: ChatOptions & { agent?: string; userId?: string; role?: string },
   ): Promise<ChatResult> {
     const agent = options?.agent ?? 'unknown';
     const userId = options?.userId;
     const startMs = Date.now();
 
-    const config = await this.resolveConfig();
+    const config = await this.resolveConfig({ userId, role: options?.role });
     if (!config.apiKey) {
       await this.logUsage({
         agent,
@@ -133,6 +153,10 @@ export class AiGatewayService {
             'Content-Type': 'application/json',
           },
           timeout: 60000,
+          maxRedirects: 0,
+          ...(config.baseUrlSource === 'db' && enforcePublicOutbound()
+            ? { ...publicOutboundAgents(), proxy: false as const }
+            : {}),
         }),
       );
 
@@ -243,8 +267,13 @@ export class AiGatewayService {
     agent?: string;
     startDate?: string;
     endDate?: string;
+    actor?: SellerActor;
   }): Promise<UsageStats> {
     const conditions = [];
+    const actor = params?.actor;
+    if (actor && !isPlatformAdmin(actor.role)) {
+      conditions.push(actor.userId ? eq(aiUsageLog.userId, actor.userId) : sql`FALSE`);
+    }
     if (params?.agent) {
       conditions.push(eq(aiUsageLog.agent, params.agent));
     }

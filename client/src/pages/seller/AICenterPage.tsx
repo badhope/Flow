@@ -36,6 +36,14 @@ import {
 } from '@/components/ui/dialog';
 import { Markdown } from '@/components/ui/markdown';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '@/contexts/LanguageContext';
+import {
+  FlowEmpty,
+  FlowPanel,
+  FlowStat,
+  FlowStatus,
+  SellerPageHeader,
+} from '@/components/seller/SellerUI';
 import { aiApi } from '@/api';
 import type {
   AIStatusResponse,
@@ -52,16 +60,15 @@ import type {
 import { toast } from 'sonner';
 import { notifyError } from '@/lib/error-feedback';
 
-const PROVIDER_PRESETS: Array<{ label: string; baseUrl: string; model: string }> = [
-  { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
-  { label: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-  { label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus' },
-  { label: 'OpenAI', baseUrl: 'https://api.openai.com', model: 'gpt-4o-mini' },
-  { label: '火山方舟', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: '' },
-];
+import AgentRoster from './ai-center/AgentRoster';
+import ModelSettingsPanel from './ai-center/ModelSettingsPanel';
+import UsagePanel from './ai-center/UsagePanel';
+import ReportHistoryPanel from './ai-center/ReportHistoryPanel';
 
 const AICenterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  const zh = language === 'zh';
   const [status, setStatus] = useState<AIStatusResponse | null>(null);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(true);
 
@@ -361,42 +368,30 @@ const AICenterPage: React.FC = () => {
   const featureCards = [
     {
       title: 'AI 文案生成',
-      description: '一键生成多语言商品标题、卖点和描述，提升转化率',
+      description: '一键生成多语言商品标题、卖点和描述',
       icon: Sparkles,
-      color: 'from-violet-500 to-purple-600',
-      bgColor: 'bg-violet-50',
-      iconColor: 'text-violet-600',
       actionLabel: '前往使用',
       onClick: () => navigate('/seller/products'),
     },
     {
-      title: '智能客服配置',
-      description: 'AI 自动回复买家咨询，7x24 小时在线服务',
+      title: '智能客服',
+      description: '基于店铺 FAQ 与真实订单状态自动应答',
       icon: MessageSquareText,
-      color: 'from-indigo-500 to-blue-600',
-      bgColor: 'bg-indigo-50',
-      iconColor: 'text-indigo-600',
       actionLabel: '前往咨询管理',
       onClick: () => navigate('/seller/inquiries'),
     },
     {
-      title: '市场趋势分析',
-      description: 'AI 分析全球市场动态，生成趋势简报',
+      title: '市场趋势',
+      description: '聚合近 30 天销量后由模型解读',
       icon: TrendingUp,
-      color: 'from-emerald-500 to-teal-600',
-      bgColor: 'bg-emerald-50',
-      iconColor: 'text-emerald-600',
       actionLabel: trendReport ? '重新生成' : '生成趋势简报',
       onClick: handleGenerateTrend,
       loading: trendLoading,
     },
     {
       title: '选品建议',
-      description: '基于市场数据 AI 推荐热门选品方向',
+      description: '结合类目、热销与 90 天需求缺口推荐',
       icon: Lightbulb,
-      color: 'from-amber-500 to-orange-600',
-      bgColor: 'bg-amber-50',
-      iconColor: 'text-amber-600',
       actionLabel: selectResult ? '重新推荐' : '帮我选品',
       onClick: handleGenerateSelect,
       loading: selectLoading,
@@ -404,513 +399,146 @@ const AICenterPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* AI 配置状态提示 */}
-      {!loadingStatus && !status?.configured && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 shadow-sm">
-          <AlertTriangle className="h-6 w-6 flex-shrink-0 text-amber-600 mt-0.5" />
-          <div className="flex-1">
-            <div className="font-semibold text-base mb-1">
-              AI 功能尚未启用 —— 请填写模型
-            </div>
-            <div className="text-sm text-amber-800 leading-relaxed space-y-1">
-              <p>
-                在下方「模型设置」中填写您的模型 API（Base URL / API Key / 模型名），保存后立即生效。
-                运维也可通过 LLM_BASE_URL / LLM_API_KEY 环境变量提供默认值（界面设置优先级更高）。
-              </p>
-              <p className="pt-1 text-amber-700">
-                未配置期间，所有 AI 功能会明确提示「请填写模型」，绝不返回假数据。
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="space-y-4">
+      <SellerPageHeader
+        eyebrow={zh ? 'AI 控制台' : 'AI console'}
+        title={zh ? 'AI 分析中心' : 'AI Center'}
+        description={
+          zh
+            ? '5 个内置 Agent + 自定义 Agent，全部走真实模型调用；未配置模型时诚实报错，不返回假数据。'
+            : 'Five built-in agents plus custom ones, all backed by real model calls. Honestly errors when unconfigured.'
+        }
+        status={
+          !loadingStatus ? (
+            <FlowStatus tone={status?.configured ? 'ok' : 'warn'}>
+              {status?.configured ? (status.model || (zh ? '已配置' : 'Configured')) : zh ? '未配置模型' : 'No model'}
+            </FlowStatus>
+          ) : null
+        }
+      />
 
-      {!loadingStatus && status?.configured && (
-        <div className="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 text-violet-800">
-          <Sparkles className="h-5 w-5 flex-shrink-0" />
-          <div className="flex-1">
-            <div className="font-medium">AI 功能已启用</div>
-            <div className="text-sm text-violet-700">
-              当前模型：{status.model || '默认模型'}
-            </div>
-          </div>
-          <Badge variant="default" className="bg-violet-600">
-            已配置
-          </Badge>
-        </div>
-      )}
+      {/* 概览：3 指标 */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <FlowStat
+          label={zh ? '累计调用' : 'Total calls'}
+          value={usageStats ? usageStats.totalCalls.toLocaleString() : '--'}
+          icon={Zap}
+        />
+        <FlowStat
+          label={zh ? '成功率' : 'Success rate'}
+          value={usageStats ? `${(usageStats.successRate * 100).toFixed(1)}%` : '--'}
+          icon={CheckCircle2}
+        />
+        <FlowStat
+          label={zh ? '总耗时' : 'Total time'}
+          value={usageStats ? `${(usageStats.totalDurationMs / 1000).toFixed(1)}s` : '--'}
+          icon={Clock}
+        />
+        <FlowStat
+          label={zh ? '历史报告' : 'Reports'}
+          value={reports.length}
+          icon={BarChart3}
+        />
+      </div>
 
-      {/* 模型设置 */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Settings2 className="h-5 w-5 text-slate-600" />
-            模型设置
-          </CardTitle>
-          <CardDescription>
-            填写 OpenAI 兼容的模型端点（可一键预填常见服务商），保存后立即生效；不填写也完全可以——除 AI 以外的所有功能不受影响，AI 功能会诚实提示「请填写模型」
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            {aiSettings?.configured ? (
-              <Badge className="bg-emerald-100 text-emerald-700">已配置</Badge>
-            ) : (
-              <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                未配置
-              </Badge>
-            )}
-            {aiSettings?.source === 'db' && <span className="text-muted-foreground">来源：界面设置</span>}
-            {aiSettings?.source === 'env' && (
-              <span className="text-muted-foreground">来源：环境变量（引导默认值）</span>
-            )}
-            {aiSettings?.apiKeyMasked && (
-              <span className="text-muted-foreground">当前 Key：{aiSettings.apiKeyMasked}</span>
-            )}
-          </div>
+      {/* Agent 名册：内置 + 自定义 */}
+      <AgentRoster
+        zh={zh}
+        builtin={agents.builtin}
+        custom={agents.custom}
+        runAgentId={runAgentId}
+        runInput={runInput}
+        runOutput={runOutput}
+        onRunInputChange={setRunInput}
+        onCreate={openCreateAgent}
+        onRun={(agent) => {
+          setRunAgentId(agent.id);
+          void handleRunAgent(agent);
+        }}
+        onEdit={openEditAgent}
+        onRemove={(agent) => void handleRemoveAgent(agent)}
+      />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">一键预填：</span>
-            {PROVIDER_PRESETS.map((preset) => (
-              <Button
-                key={preset.label}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                onClick={() =>
-                  setSettingsForm((prev) => ({ ...prev, baseUrl: preset.baseUrl, model: preset.model }))
-                }
-              >
-                {preset.label}
-              </Button>
-            ))}
-            <span className="text-xs text-muted-foreground">
-              （Key 请使用您自己的账号；也可直接手填任意 OpenAI 兼容端点）
-            </span>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label>Base URL</Label>
-              <Input
-                value={settingsForm.baseUrl}
-                placeholder="https://api.deepseek.com"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>API Key</Label>
-              <Input
-                type="password"
-                value={settingsForm.apiKey}
-                placeholder="留空不修改；输入新值覆盖"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, apiKey: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>模型名</Label>
-              <Input
-                value={settingsForm.model}
-                placeholder="deepseek-chat"
-                onChange={(e) => setSettingsForm((prev) => ({ ...prev, model: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void handleSaveAiSettings()} disabled={settingsSaving}>
-              {settingsSaving ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-1 h-4 w-4" />
-              )}
-              保存设置
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleTestAiSettings()}
-              disabled={settingsTesting}
-            >
-              {settingsTesting ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="mr-1 h-4 w-4" />
-              )}
-              测试连通（使用已保存配置）
-            </Button>
-            {aiSettings?.apiKeyMasked && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-red-600 hover:text-red-700"
-                onClick={() => void handleClearApiKey()}
-              >
-                清除界面 Key
-              </Button>
-            )}
-          </div>
-
-          {settingsTestResult && (
-            <p className={`text-sm ${settingsTestResult.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-              {settingsTestResult.message}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* 用量统计 */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-5 w-5 text-violet-600" />
-            AI 用量统计
-          </CardTitle>
-          <CardDescription>累计调用量与资源消耗</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2">
-          {usageLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : usageStats ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-ai-section-type="card-stat">
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Zap className="h-3.5 w-3.5" />
-                    总调用次数
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {usageStats.totalCalls.toLocaleString()}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Clock className="h-3.5 w-3.5" />
-                    总耗时(秒)
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.totalDurationMs / 1000).toFixed(1)}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Token 总量
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.totalInputTokens + usageStats.totalOutputTokens).toLocaleString()}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-slate-50 p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    成功率
-                  </div>
-                  <div className="mt-1 text-xl font-bold text-slate-900">
-                    {(usageStats.successRate * 100).toFixed(1)}%
-                  </div>
-                </div>
-              </div>
-              {usageStats.byAgent.length > 0 && (
-                <div className="pt-2">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">
-                    按 Agent 分布
-                  </div>
-                  <div className="space-y-2">
-                    {usageStats.byAgent.map((stat) => (
-                      <div
-                        key={stat.agent}
-                        className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
-                      >
-                        <span className="text-sm font-medium text-slate-700 capitalize">
-                          {stat.agent}
-                        </span>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span>{stat.calls} 次</span>
-                          <span>{stat.inputTokens + stat.outputTokens} tokens</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* 功能卡片网格 */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {featureCards.map((card, index) => {
+      {/* 能力入口 */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {featureCards.map((card) => {
           const Icon = card.icon;
           return (
-            <Card
-              key={index}
-              className="cursor-pointer overflow-hidden shadow-sm transition-all hover:shadow-md"
+            <button
+              key={card.title}
+              type="button"
+              onClick={() => void card.onClick()}
+              disabled={card.loading}
+              className="group rounded-xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] p-4 text-left transition-colors hover:border-[var(--flow-line-3)] hover:bg-[var(--flow-surface-2)] disabled:opacity-60"
             >
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-xl ${card.bgColor}`}
-                  >
-                    <Icon className={`h-7 w-7 ${card.iconColor}`} />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      {card.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {card.description}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={card.onClick}
-                      disabled={card.loading}
-                      className="mt-3"
-                    >
-                      {card.loading ? (
-                        <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          生成中...
-                        </>
-                      ) : (
-                        <>
-                          {card.actionLabel}
-                          <ChevronRight className="ml-1 h-4 w-4" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--flow-accent-soft)]">
+                {card.loading ? (
+                  <Loader2 className="size-4 animate-spin text-[var(--flow-accent)]" />
+                ) : (
+                  <Icon className="size-4 text-[var(--flow-accent)]" />
+                )}
+              </span>
+              <p className="mt-3 text-[13px] font-medium text-[var(--flow-text-1)]">{card.title}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--flow-text-2)]">{card.description}</p>
+              <span className="mt-3 inline-flex items-center gap-1 text-[11px] text-[var(--flow-text-3)] transition-colors group-hover:text-[var(--flow-accent)]">
+                {card.loading ? (zh ? '生成中…' : 'Generating…') : card.actionLabel}
+                <ChevronRight className="size-3" />
+              </span>
+            </button>
           );
         })}
       </div>
 
-      {/* 趋势报告结果 */}
-      {trendReport && (
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-5 w-5 text-emerald-600" />
-              {trendReport.title || '市场趋势简报'}
-            </CardTitle>
-            <CardDescription>
-              生成时间：{new Date(trendReport.createdAt).toLocaleString('zh-CN')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="prose prose-sm max-w-none">
-              <Markdown>{trendReport.content}</Markdown>
-            </div>
-          </CardContent>
-        </Card>
+      {!loadingStatus && !status?.configured && (
+        <div className="flex items-start gap-3 rounded-xl border border-[var(--flow-warn)]/30 bg-[var(--flow-warn)]/10 p-4">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--flow-warn)]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-[var(--flow-text-1)]">
+              {zh ? 'AI 功能尚未启用' : 'AI is not enabled yet'}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--flow-text-2)]">
+              {zh
+                ? '在页面底部「模型设置」填写 OpenAI 兼容端点即可启用；未配置期间 AI 端点诚实返回提示，绝不返回假数据。'
+                : 'Fill the OpenAI-compatible endpoint under Model settings at the bottom. Until then AI endpoints honestly refuse instead of returning fake data.'}
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* 我的 Agent（自定义） */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Bot className="h-5 w-5 text-indigo-600" />
-                我的 Agent
-              </CardTitle>
-              <CardDescription>
-                默认内置 5 个专业 Agent（只读）；可创建任意数量自定义 Agent，保存后即可试跑
-              </CardDescription>
-            </div>
-            <Button size="sm" onClick={openCreateAgent}>
-              <Plus className="mr-1 h-4 w-4" />
-              新建 Agent
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-2">
-          <div className="space-y-2">
-            {agents.builtin.map((agent) => (
-              <div
-                key={agent.key}
-                className="flex items-start justify-between rounded-md bg-slate-50 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-800">
-                    {agent.name}
-                    <Badge variant="secondary" className="ml-2 text-xs">
-                      内置 · 只读
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {agent.description}（{agent.usesModel}）
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* 模型设置 */}
+      <ModelSettingsPanel
+        zh={zh}
+        settings={aiSettings}
+        form={settingsForm}
+        saving={settingsSaving}
+        testing={settingsTesting}
+        testResult={settingsTestResult}
+        onChange={setSettingsForm}
+        onSave={() => void handleSaveAiSettings()}
+        onTest={() => void handleTestAiSettings()}
+        onClearKey={() => void handleClearApiKey()}
+      />
 
-          {agents.custom.length === 0 ? (
-            <p className="py-2 text-center text-sm text-muted-foreground">
-              暂无自定义 Agent —— 点击右上角「新建 Agent」开始
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {agents.custom.map((agent) => (
-                <div key={agent.id} className="rounded-md border px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-slate-800">
-                        {agent.name}
-                        <span className="ml-2 font-mono text-xs text-muted-foreground">{agent.slug}</span>
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          {agent.responseFormat === 'json' ? 'JSON' : '文本'}
-                        </Badge>
-                        {!agent.enabled && (
-                          <Badge variant="secondary" className="ml-1 text-xs text-slate-500">
-                            已停用
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {agent.description || '（无描述）'}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title="试跑"
-                        onClick={() => {
-                          setRunAgentId(runAgentId === agent.id ? null : agent.id);
-                          setRunOutput(null);
-                        }}
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" title="编辑" onClick={() => openEditAgent(agent)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title="删除"
-                        className="text-red-600 hover:text-red-700"
-                        onClick={() => void handleRemoveAgent(agent)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+      <UsagePanel zh={zh} stats={usageStats} loading={usageLoading} />
 
-                  {runAgentId === agent.id && (
-                    <div className="mt-3 space-y-2">
-                      <Textarea
-                        rows={3}
-                        placeholder="输入内容后点击运行（服务端以 {{input}} 渲染模板并调用模型）"
-                        value={runInput}
-                        onChange={(e) => setRunInput(e.target.value)}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => void handleRunAgent(agent)}
-                        disabled={runLoading || !runInput.trim()}
-                      >
-                        {runLoading ? (
-                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Play className="mr-1 h-4 w-4" />
-                        )}
-                        运行
-                      </Button>
-                      {runOutput && (
-                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-slate-900 p-3 text-xs text-slate-100">
-                          {runOutput}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* 历史报告（落库回看） */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Clock className="h-5 w-5 text-slate-500" />
-            历史报告
-          </CardTitle>
-          <CardDescription>已生成的趋势报告会落库保存，可随时回看</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2">
-          {reports.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">暂无历史报告</p>
-          ) : (
-            <div className="space-y-2">
-              {reports.map((report) => (
-                <div
-                  key={report.id}
-                  className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-slate-800">
-                      {report.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(report.createdAt).toLocaleString('zh-CN')}
-                      {report.model ? ` · ${report.model}` : ''}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleViewReport(report.id)}
-                  >
-                    查看
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          {activeReport && (
-            <div className="mt-4 rounded-lg border p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-800">
-                  {activeReport.title}
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setActiveReport(null)}>
-                  收起
-                </Button>
-              </div>
-              <div className="prose prose-sm max-w-none">
-                <Markdown>{activeReport.content}</Markdown>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ReportHistoryPanel
+        zh={zh}
+        reports={reports}
+        activeReport={activeReport}
+        onView={(id) => void handleViewReport(id)}
+        onClose={() => setActiveReport(null)}
+      />
+
 
       {/* 选品建议结果 */}
       {selectResult && selectResult.items.length > 0 && (
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Lightbulb className="h-5 w-5 text-amber-500" />
-              AI 选品推荐
-            </CardTitle>
-            <CardDescription>
-              基于市场数据分析的 {selectResult.items.length} 个选品方向
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-2">
+        <FlowPanel
+          title={zh ? 'AI 选品推荐' : 'AI product picks'}
+          description={zh ? `基于市场数据的 ${selectResult.items.length} 个方向` : `${selectResult.items.length} directions from market data`}
+          icon={Lightbulb}
+          bodyClassName="space-y-3"
+        >
             {selectResult.items.map((item, index) => (
               <div
                 key={index}
@@ -954,8 +582,7 @@ const AICenterPage: React.FC = () => {
                 </p>
               </div>
             ))}
-          </CardContent>
-        </Card>
+        </FlowPanel>
       )}
       {/* Agent 新建/编辑对话框 */}
       <Dialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen}>

@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Logger, BadRequestException, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import { aiSettings } from '../../database/schema';
 import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotNotifyService } from './copilot-notify.service';
+import { enforcePublicOutbound, isSafePublicHttpUrl } from '../../common/http/url-guard';
 import type { SmtpConfig } from './copilot-notify-transport';
 import { diffNewInsights } from './copilot-insight-digest';
 import { formatForChannel, renderDigest } from './copilot-digest-format';
@@ -26,6 +27,11 @@ export interface WatchSettings {
 }
 
 export const WATCH_SETTINGS_KEY = 'copilot_watch_settings';
+/** 卖家作用域键：`{userId}:{key}`（admin 用全局键，与 ai-settings-scope 同规则） */
+export function watchSettingsKeyFor(actor: { userId?: string; role?: string }): string {
+  if (actor.role === 'admin' || !actor.userId) return WATCH_SETTINGS_KEY;
+  return `${actor.userId}:${WATCH_SETTINGS_KEY}`;
+}
 export const DEFAULT_WATCH_SETTINGS: WatchSettings = {
   enabled: false,
   intervalMinutes: 30,
@@ -37,6 +43,12 @@ export const DEFAULT_WATCH_SETTINGS: WatchSettings = {
 const WATCH_SNAPSHOT_KEY = 'copilot_watch_last_snapshot';
 /** 跨进程互斥锁（多副本部署时只有一个实例执行巡检） */
 const WATCH_LOCK_KEY = 'copilot_watch_lock';
+
+/** 巡检相关键统一按 actor 作用域：admin 用全局键，seller 用 `{userId}:` 前缀 */
+function scopedWatchKey(actor: { userId?: string; role?: string }, baseKey: string): string {
+  if (actor.role === 'admin' || !actor.userId) return baseKey;
+  return `${actor.userId}:${baseKey}`;
+}
 
 /**
  * 定时巡检：Node 原生定时器（不引入 @nestjs/schedule，零新依赖）。
@@ -70,11 +82,12 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     }
   }
 
-  async getSettings(): Promise<WatchSettings> {
+  async getSettings(actor: { userId?: string; role?: string } = {}): Promise<WatchSettings> {
+    const settingsKey = watchSettingsKeyFor(actor);
     const rows = await this.db
       .select({ value: aiSettings.value })
       .from(aiSettings)
-      .where(eq(aiSettings.key, WATCH_SETTINGS_KEY))
+      .where(eq(aiSettings.key, settingsKey))
       .limit(1);
     if (!rows[0]?.value) return { ...DEFAULT_WATCH_SETTINGS };
     try {
@@ -95,8 +108,21 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     }
   }
 
-  async updateSettings(input: Partial<WatchSettings>, actorId: string): Promise<WatchSettings> {
-    const current = await this.getSettings();
+  async updateSettings(
+    input: Partial<WatchSettings>,
+    actor: { userId?: string; role?: string },
+  ): Promise<WatchSettings> {
+    const actorId = actor.userId ?? '';
+    const settingsKey = watchSettingsKeyFor(actor);
+    const current = await this.getSettings(actor);
+    if (
+      enforcePublicOutbound()
+      && input.notifyUrl !== undefined
+      && input.notifyUrl.trim()
+      && !isSafePublicHttpUrl(input.notifyUrl.trim())
+    ) {
+      throw new BadRequestException('通知地址不可用：禁止指向内网/保留地址（SSRF 防护）');
+    }
     const next: WatchSettings = {
       enabled: input.enabled === undefined ? current.enabled : input.enabled === true,
       intervalMinutes: input.intervalMinutes === undefined
@@ -112,7 +138,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     };
     await this.db
       .insert(aiSettings)
-      .values({ key: WATCH_SETTINGS_KEY, value: JSON.stringify(next), updatedBy: actorId })
+      .values({ key: settingsKey, value: JSON.stringify(next), updatedBy: actorId })
       .onConflictDoUpdate({
         target: aiSettings.key,
         set: { value: JSON.stringify(next), updatedBy: actorId, updatedAt: new Date() },
@@ -121,9 +147,9 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     return next;
   }
 
-  /** 按当前配置重建定时器（配置变化后调用） */
+  /** 按当前配置重建定时器（配置变化后调用）。admin 全局设置驱动调度；seller 设置仅存取 */
   async reschedule(): Promise<void> {
-    const settings = await this.getSettings();
+    const settings = await this.getSettings({ role: 'admin' });
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -143,28 +169,31 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     this.logger.log(`定时巡检已开启：每 ${settings.intervalMinutes} 分钟`);
   }
 
-  /** 执行一次巡检（含跨进程互斥与新增告警 diff） */
-  async runOnce(force = false): Promise<{ ran: boolean; message: string }> {
+  /**
+   * 执行一次巡检（含跨进程互斥与新增告警 diff）。
+   * 作用域语义（v1.22 修正）：手动触发按调用者 actor 执行；后台定时器按 admin 全局配置执行。
+   */
+  async runOnce(force = false, actor: { userId?: string; role?: string } = { role: 'admin' }): Promise<{ ran: boolean; message: string }> {
     if (this.running) return { ran: false, message: '上一次巡检仍在执行' };
     this.running = true;
     try {
-      if (!force && !(await this.getSettings()).enabled) {
+      if (!force && !(await this.getSettings(actor)).enabled) {
         return { ran: false, message: '定时巡检未开启' };
       }
 
-      const locked = await this.acquireLock();
+      const locked = await this.acquireLock(actor);
       if (!locked) return { ran: false, message: '其他实例正在巡检' };
 
       try {
-        const { insights } = await this.insightsService.getInsights();
-        const previous = await this.readSnapshot();
+        const { insights } = await this.insightsService.getInsights(actor);
+        const previous = await this.readSnapshot(actor);
         const newInsights = diffNewInsights(previous, insights);
         const plainDigest = renderDigest({ insights, newInsights }, 'plain');
 
-        await this.writeSnapshot(insights);
+        await this.writeSnapshot(insights, actor);
         this.logger.log(plainDigest.replace(/\n/g, ' | '));
 
-        const settings = await this.getSettings();
+        const settings = await this.getSettings(actor);
         const channelReady = settings.notifyKind === 'email'
           ? !!settings.notifySmtp?.host
           : settings.notifyKind === 'webhook' ? !!settings.notifyUrl : false;
@@ -190,7 +219,7 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
 
         return { ran: true, message: plainDigest + notifyNote };
       } finally {
-        await this.releaseLock();
+        await this.releaseLock(actor);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -207,11 +236,11 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
    * 跨进程互斥：用 ai_settings 一行的 updated_at 做租约。
    * 单条 UPDATE ... WHERE updated_at < now() - lease 是原子的，命中即获得锁。
    */
-  private async acquireLock(): Promise<boolean> {
+  private async acquireLock(actor: { userId?: string; role?: string }): Promise<boolean> {
     const leaseSeconds = 300;
     const rows = await this.db.execute<{ key: string }>(sql`
       INSERT INTO ${aiSettings} (key, value, updated_at)
-      VALUES (${WATCH_LOCK_KEY}, '1', now())
+      VALUES (${scopedWatchKey(actor, WATCH_LOCK_KEY)}, '1', now())
       ON CONFLICT (key) DO UPDATE
         SET updated_at = now()
         WHERE ai_settings.updated_at < now() - (${leaseSeconds} || ' seconds')::interval
@@ -220,18 +249,18 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     return Array.isArray(rows) && rows.length > 0;
   }
 
-  private async releaseLock(): Promise<void> {
+  private async releaseLock(actor: { userId?: string; role?: string }): Promise<void> {
     await this.db.execute(sql`
       UPDATE ${aiSettings} SET updated_at = now() - interval '1 hour'
-      WHERE key = ${WATCH_LOCK_KEY}
+      WHERE key = ${scopedWatchKey(actor, WATCH_LOCK_KEY)}
     `);
   }
 
-  private async readSnapshot(): Promise<CopilotInsight[]> {
+  private async readSnapshot(actor: { userId?: string; role?: string }): Promise<CopilotInsight[]> {
     const rows = await this.db
       .select({ value: aiSettings.value })
       .from(aiSettings)
-      .where(eq(aiSettings.key, WATCH_SNAPSHOT_KEY))
+      .where(eq(aiSettings.key, scopedWatchKey(actor, WATCH_SNAPSHOT_KEY)))
       .limit(1);
     if (!rows[0]?.value) return [];
     try {
@@ -242,11 +271,11 @@ export class CopilotWatchService implements OnApplicationBootstrap, OnApplicatio
     }
   }
 
-  private async writeSnapshot(insights: CopilotInsight[]): Promise<void> {
+  private async writeSnapshot(insights: CopilotInsight[], actor: { userId?: string; role?: string }): Promise<void> {
     const value = JSON.stringify(insights);
     await this.db
       .insert(aiSettings)
-      .values({ key: WATCH_SNAPSHOT_KEY, value })
+      .values({ key: scopedWatchKey(actor, WATCH_SNAPSHOT_KEY), value })
       .onConflictDoUpdate({
         target: aiSettings.key,
         set: { value, updatedAt: new Date() },
@@ -267,6 +296,14 @@ function normalizeSmtp(value: unknown): SmtpConfig | undefined {
   const from = typeof raw.from === 'string' ? raw.from.trim().slice(0, 200) : '';
   const to = typeof raw.to === 'string' ? raw.to.trim().slice(0, 500) : '';
   if (!host || !from || !to) return undefined;
+  // 非 dev/test 环境 SMTP 目标必须来自运维 allowlist，避免 seller 用 host/port 探测内网或云元数据。
+  if (enforcePublicOutbound()) {
+    const allowed = (process.env.SMTP_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+    if (!allowed.includes(host.toLowerCase())) return undefined;
+  }
   const port = typeof raw.port === 'number' && Number.isFinite(raw.port) ? Math.round(raw.port) : 587;
   return {
     host,

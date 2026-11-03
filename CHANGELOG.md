@@ -5,6 +5,118 @@
 
 ---
 
+## [1.23.0] — 2026-11-02
+
+**主题：可验证性、可移植性与文档对齐。** 不新增产品功能，让既有平台在作者机器之外可证明地跑起来，
+并让仓库对人、对编码 agent 都可自解释。
+
+### Added
+
+- `scripts/run-all-smoke.mjs` 支持 `E2E_DATABASE_URL`：没有 Docker、embedded 二进制无法启动时，
+  六套 E2E 可跑在任意可达的 PostgreSQL 上（Windows 主机、CI service、托管 PG）。
+- `assertDisposableDatabase()` 护栏：库名不含 `e2e` / `smoke` / `test` 时拒绝重置，防止误清真实库。
+- `scripts/qa/stack.mjs`：一条命令完成「重置可丢弃库 → 迁移 → 启动生产服务 → 播种演示数据」。
+- `scripts/qa/journey-audit.mjs`：真实浏览器走遍买家与卖家全部路由，控制台错误、请求失败、
+  页面异常或内容缺失均判失败。
+- `scripts/qa/purchase-journey.mjs`：用真实可见控件走完「列表 → 详情 → 加购 → 购物车 → 结算 → 订单」。
+- `npm run qa:journey` / `qa:purchase` / `qa:stack` 脚本。
+- `README.zh-CN.md`：英文 README 的完整中文对应版本。
+- `docs/PROJECT-MANAGEMENT.md`：版本号、发布清单、分支策略、多远程发布流程。
+- `docs/MAINTAINERS.md`：角色定义与评审要求。
+
+### Changed
+
+- 截图管线在截图前滚动整页以触发懒加载图片解码，并在任何图片解码失败时让整轮失败；
+  此前整页截图会残留空白商品卡片。
+- 截图管线支持 `CAPTURE_DATABASE_URL`，不再强依赖 embedded PostgreSQL。
+- README 改为英文主页面 + 语言切换，中文版是完整翻译而非残缺镜像。
+- 发布素材重生成：31 张截图与演示视频来自真实 PostgreSQL 运行，而不是在 Windows 管理员权限下
+  无法启动的 embedded 路径。
+
+### Fixed
+
+- **CSRF 豁免路径按前缀匹配**：`/api/payments/stripe-webhook-evil` 之类仿冒路径也会绕过
+  `X-Requested-With` 校验。改为精确匹配（去一个尾斜杠），并补 8 个用例锁定行为。
+- 卖家工作台的买家客服悬浮按钮遮挡副驾发送按钮：客服组件改为仅在买家区域渲染。
+- 深色页脚 logo 用 `brightness-0 invert` 处理白底图，导致「AI」被滤成白块：改用白色版 logo。
+- 整页截图中商品卡片空白：折叠区下方 `loading="lazy"` 图片在截图前未解码。
+- `scripts/capture/run-capture.mjs` 在 Windows 管理员账户下完全无法运行。
+
+### Verification
+
+- `npm run lint` — 0 问题
+- `npm run type:check` — 前后端 0 错误
+- `npm test` — 286/286，45 个文件（新增 30 个：商品管理 17、RBAC 5、CSRF 8）
+- `npm run build` — 前后端构建通过
+- `npm audit --omit=dev` — 0 漏洞（官方 npm 源）
+- `npm run smoke:all` — Windows + PostgreSQL 16.15 上六套全通过
+- `npm run qa:journey` — 19 条路由，0 控制台错误，0 请求失败
+
+### Known limits
+
+- 真实服务商沙箱验收（Stripe 测试模式、PayPal sandbox capture 与 webhook、17TRACK 真实轨迹、
+  SMTP 投递）仍待执行，见 `docs/DEPLOY.md` 第八节；PayPal webhook 验签协议兼容性未验证。
+- DNS 固定覆盖出站 HTTP 客户端；在解析与连接之间返回不同答案的恶意 resolver 被收敛但未彻底消除。
+
+---
+
+## [1.22.0] — 2026-11-01
+
+**主题：从「电商模板 + 后台」重构为「AI 原生平台」；同时补齐多租户安全短板。**
+
+### Security
+
+- AI Agent 按卖家隔离：趋势、选品、历史报告、自定义 Agent 的查询与操作全部加 seller 作用域；
+  管理员保留跨店视图。
+- 模型配置作用域化：`llm_*` 改为 `{userId}:` 前缀键，任意卖家无法读写他人或平台配置；
+  未配置时回退环境变量，不串用他人密钥。
+- 巡检与通知设置按卖家作用域；定时调度只由平台（admin）配置驱动。
+- 演示支付环境门禁：仅 `development`/`test` 允许 `provider=demo`；
+  其他环境（含未知/缺失 `NODE_ENV`）一律 403，`ALLOW_DEMO_PAYMENT` 不再提供绕过。
+- 出站 URL 防 SSRF：webhook 地址、巡检通知地址、LLM Base URL 统一拒绝环回、私网、
+  CGNAT、链路本地与裸主机名。
+- 依赖：nodemailer 7.0.13 → 10.3.1，multer 通过 overrides 升至 2.5.0；`npm audit --omit=dev` 归零。
+
+### Added
+
+- 双模态设计系统（`docs/DESIGN-SYSTEM.md`）：买家浅色、卖家深色，统一 token / 字阶 / 动效 / 图表配色。
+- 全局 AI 命令面板（⌘K）：导航与自然语言共用一个入口，AI 兜底始终排第一。
+- Agent 运行轨迹组件：步骤状态、工具名、耗时、可折叠。
+- 人工审批门禁卡片：仅 `pending` 可批准/拒绝，高风险工具标红。
+- 卖家页面原语：`SellerPageHeader` / `FlowPanel` / `FlowStat` / `FlowEmpty` / `FlowStatus`。
+- 首页自然语言意图入口：接入真实导购会话，AI 不可用时回退关键词搜索。
+- 管理员创建入口：`npm run admin:create`。
+- 产品路线图（`docs/ROADMAP.md`）。
+- 前端测试基础设施：vitest + jsdom + testing-library，新增 17 个前端用例（组件行为与纯函数；全项目共 256 个用例）。
+
+### Changed
+
+- 卖家看板重做为 12 栏布局：今日 AI 简报 + KPI + 趋势/分类图 + 待处理队列；
+  巡检接口失败时显示失败态，不再伪装成「暂无异常」。
+- AI 分析中心改为 Agent 控制台：指标概览与 Agent 名册前置，模型设置后置。
+- 商品管理页改为统一标题区 + sticky 工具栏；订单/退款/优惠券/集合/CMS/审计/运费模板统一页面头。
+- 买家端主色统一为 token（`--flow-ink` / `--flow-accent`），移除页面内硬编码品牌 hex。
+- 侧栏恢复审计日志入口；Copilot 支持 `?c=` / `?q=` 深链；Dashboard 支持「交给副驾」预填。
+
+### Fixed
+
+- 巡检数据 actor 契约错位（`sellerId` vs `userId`）导致的跨卖家告警可见。
+- 命令面板连续 Enter / 双击会重复创建会话并重复发送。
+- 审批卡对已执行动作仍显示批准按钮，导致无效请求。
+- 首页意图参数与商品列表参数不一致（`q` vs `keyword`）。
+- 历史页面在深色工作台下出现浅色块与低对比文字（兼容层映射到 token）。
+
+### Verification
+
+- `npm run type:check`：前后端 0 错误
+- `npm run lint`：0 问题
+- `npm test`：42 文件 / 256 用例全通过（原 34 / 198）
+- `npm run build`：通过
+- `npm audit --omit=dev`：0 漏洞
+- 变异验证：移除 AI 兜底逻辑后 2 个前端用例转红；移除退款数量 clamp 后 1 个后端用例转红
+
+---
+
 ## [1.21.1] — 2026-10-24
 
 仓库统一命名与 CI 全绿。
@@ -29,7 +141,7 @@
 
 ### Verification
 - 三仓 GitHub Actions：`Lint / Typecheck / Test / Build` 与 `E2E Smoke (Postgres)` 全绿（`f9d1e35`）。
-- 本地：lint 0 / 双端 typecheck 0 / 166 单测 / build 通过 / `smoke:all` 6 套全通过。
+- 本地：lint 0 / 双端 typecheck 0 / 42 文件、256 用例 / build 通过；当前 HEAD 的真库 E2E 需通过 `npm run build && npm run smoke:all` 重新复核。
 - 9 个 Dependabot PR 已全部关闭（依赖已集中升级），三仓开放 PR 数为 0。
 
 ---

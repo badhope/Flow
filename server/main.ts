@@ -112,7 +112,12 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const port = parseInt(process.env.PORT ?? '3000', 10);
-  await app.listen(port);
+  const host = process.env.HOST;
+  if (host) {
+    await app.listen(port, host);
+  } else {
+    await app.listen(port);
+  }
   Logger.log(`Flow server running on http://localhost:${port}/api`, 'Bootstrap');
 }
 

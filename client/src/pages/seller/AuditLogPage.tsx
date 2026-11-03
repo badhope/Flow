@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { getAuditLogs } from '@/api/audit';
 import type { AuditLog } from '@shared/api.interface';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 const ACTION_OPTIONS = [
   { value: '', label: '全部操作' },
@@ -124,13 +125,11 @@ const AuditLogPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <FileText className="size-6 text-indigo-500" />
-          操作审计
-        </h1>
-      </div>
+      <SellerPageHeader
+        eyebrow={'Audit logs'}
+        title={'操作审计'}
+        description={'所有写操作的前后值 diff、操作者与来源 IP；按卖家隔离，管理员可跨店查看。'}
+      />
 
       {/* Filter Card */}
       <Card className="rounded-xl bg-white p-4">

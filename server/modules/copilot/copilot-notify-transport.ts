@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { enforcePublicOutbound, isSafePublicHttpUrl, publicOutboundAgents } from '../../common/http/url-guard';
 
 export type NotifyKind = 'webhook' | 'email' | 'none';
 
@@ -56,23 +59,38 @@ export class NotifyTransport {
     if (!/^https?:\/\//i.test(url)) {
       return { ok: false, channel: 'webhook', message: 'Webhook 地址必须以 http(s):// 开头', permanent: true };
     }
+    if (enforcePublicOutbound() && !isSafePublicHttpUrl(url)) {
+      let safeHost = 'invalid';
+      try { safeHost = new URL(url).hostname; } catch { /* validation already failed */ }
+      this.logger.warn(`Webhook 地址被拒绝（私网/保留地址）: host=${safeHost}`);
+      return {
+        ok: false,
+        channel: 'webhook',
+        message: 'Webhook 地址不可用：禁止指向内网/保留地址（SSRF 防护）',
+        permanent: true,
+      };
+    }
 
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, msgtype: 'text', content: { text } }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
+        const body = JSON.stringify({ text, msgtype: 'text', content: { text } });
+        const status = enforcePublicOutbound()
+          ? await this.sendPublicWebhook(url, body, controller.signal)
+          : (await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body,
+              signal: controller.signal,
+              redirect: 'manual',
+            })).status;
+        if (status < 200 || status >= 300) {
           return {
             ok: false,
             channel: 'webhook',
-            message: `Webhook 返回 HTTP ${response.status}`,
-            permanent: !(response.status >= 500 || response.status === 429),
+            message: `Webhook 返回 HTTP ${status}`,
+            permanent: !(status >= 500 || status === 429),
           };
         }
         return { ok: true, channel: 'webhook', message: '通知已发送' };
@@ -83,6 +101,29 @@ export class NotifyTransport {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Webhook 发送失败：${message}`);
       return { ok: false, channel: 'webhook', message: `发送失败：${message}`, permanent: false };
+    }
+  }
+
+  private async sendPublicWebhook(url: string, body: string, signal: AbortSignal): Promise<number> {
+    const target = new URL(url);
+    const agents = publicOutboundAgents();
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        const request = (target.protocol === 'https:' ? httpsRequest : httpRequest)(target, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          agent: target.protocol === 'https:' ? agents.httpsAgent : agents.httpAgent,
+          signal,
+        }, (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        });
+        request.on('error', reject);
+        request.end(body);
+      });
+    } finally {
+      agents.httpAgent.destroy();
+      agents.httpsAgent.destroy();
     }
   }
 

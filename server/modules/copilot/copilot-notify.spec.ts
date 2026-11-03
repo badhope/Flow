@@ -119,6 +119,23 @@ describe('NotifyTransport', () => {
     expect((await transport.deliver({ kind: 'webhook', url: 'https://e.com/h' }, 's', 't')).permanent).toBe(true);
   });
 
+  it('未知环境拒绝私网 webhook，测试环境拒绝重定向', async () => {
+    const original = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = 'staging';
+      const fetchMock = vi.spyOn(globalThis, 'fetch');
+      const transport = new NotifyTransport();
+      expect((await transport.deliver({ kind: 'webhook', url: 'http://127.0.0.1/h' }, 's', 't')).permanent).toBe(true);
+      expect(fetchMock).not.toHaveBeenCalled();
+      process.env.NODE_ENV = 'test';
+      fetchMock.mockResolvedValue(new Response('', { status: 302, headers: { location: 'http://127.0.0.1/' } }));
+      expect((await transport.deliver({ kind: 'webhook', url: 'https://e.com/h' }, 's', 't')).ok).toBe(false);
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+    } finally {
+      process.env.NODE_ENV = original;
+    }
+  });
+
   it('R18: 邮件配置不完整判定为永久失败', async () => {
     const transport = new NotifyTransport();
     const result = await transport.deliver({ kind: 'email', smtp: { host: '', port: 587, secure: false, from: '', to: '' } }, 's', 't');

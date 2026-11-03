@@ -394,7 +394,7 @@ export class CopilotToolService {
           category: categoryId,
           targetMarket: '北美市场',
         },
-        actor.userId,
+        actor,
       );
       const patch: Record<string, unknown> = {};
       if (copy.titleEn) patch.titleEn = copy.titleEn.slice(0, 200);

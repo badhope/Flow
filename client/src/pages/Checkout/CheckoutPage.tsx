@@ -370,14 +370,14 @@ const CheckoutPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
+      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flow-store min-h-screen">
       <div className="container mx-auto px-6 py-6">
         <Button
           variant="ghost"
@@ -415,7 +415,7 @@ const CheckoutPage: React.FC = () => {
                         <span className="text-sm font-medium text-slate-700">
                           {t.address.title}
                         </span>
-                        <Link to="/addresses" className="text-xs text-blue-600 hover:underline">
+                        <Link to="/addresses" className="inline-flex items-center py-1 text-xs text-blue-600 hover:underline">
                           {t.address.edit}
                         </Link>
                       </div>

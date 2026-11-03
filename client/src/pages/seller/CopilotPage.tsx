@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Bot,
@@ -14,7 +15,6 @@ import {
   ShieldAlert,
   Sparkles,
   Trash2,
-  Wrench,
   X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -33,6 +33,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Markdown } from '@/components/ui/markdown';
+import AgentTrace, { type TraceStep } from '@/components/AgentTrace';
+import ConversationSidebar from './copilot/ConversationSidebar';
+import ChatPanel from './copilot/ChatPanel';
+import FunnelDialog from './copilot/FunnelDialog';
+import WatchSettingsDialog from './copilot/WatchSettingsDialog';
+import ApprovalCard from '@/components/ApprovalCard';
 import { copilotApi } from '@/api';
 import type {
   CopilotAction,
@@ -49,21 +55,8 @@ import type {
 import { toast } from 'sonner';
 import { extractErrorMessage, notifyError } from '@/lib/error-feedback';
 
-const STATUS_LABEL: Record<CopilotAction['status'], string> = {
-  pending: '待确认',
-  executed: '已执行',
-  rejected: '已拒绝',
-  failed: '执行失败',
-};
-
-const QUICK_PROMPTS: Array<{ label: string; prompt: string }> = [
-  { label: '店铺概况', prompt: '看一下店铺概况，今天表现怎么样？' },
-  { label: '待发货订单', prompt: '帮我查一下待发货的订单' },
-  { label: '库存预警', prompt: '哪些商品库存偏低？' },
-  { label: '待审批退款', prompt: '现在有哪些待审批的退款？' },
-];
-
 const CopilotPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<CopilotConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CopilotConversationDetail | null>(null);
@@ -326,12 +319,25 @@ const CopilotPage: React.FC = () => {
   useEffect(() => {
     void (async () => {
       const rows = await fetchConversations();
+      const requestedId = searchParams.get('c');
+      if (requestedId && rows.some((row) => row.id === requestedId)) {
+        await loadConversation(requestedId);
+        setSearchParams({}, { replace: true });
+        return;
+      }
       if (rows.length > 0) {
         await loadConversation(rows[0].id);
       }
     })();
     void fetchInsights();
-  }, [fetchConversations, loadConversation, fetchInsights]);
+  }, [fetchConversations, loadConversation, fetchInsights, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const prompt = searchParams.get('q');
+    if (!prompt || sending) return;
+    setSearchParams({}, { replace: true });
+    void handleSend(prompt);
+  }, [searchParams, sending, setSearchParams]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -489,14 +495,14 @@ const CopilotPage: React.FC = () => {
     );
     if (batchActions.length === 0) return null;
     return (
-      <div key={`batch-${batchId}`} className="mb-3 rounded-lg border border-indigo-300 bg-indigo-50 p-3">
+      <div key={`batch-${batchId}`} className="flow-panel mb-3 border-[var(--flow-accent)]/30 bg-[var(--flow-accent-soft)] p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-indigo-700">
+            <div className="flex items-center gap-2 text-xs text-[var(--flow-accent)]">
               <ListChecks className="h-3.5 w-3.5" />
               <span className="font-semibold">多步计划 · 共 {batchActions.length} 步（按顺序执行，失败即停）</span>
             </div>
-            <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-slate-800">
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-[var(--flow-text-1)]">
               {batchActions.map((action) => (
                 <li key={action.id}>{action.summary}</li>
               ))}
@@ -522,76 +528,41 @@ const CopilotPage: React.FC = () => {
   };
 
   const renderActionCard = (action: CopilotAction): React.ReactNode => (
-    <div
+    <ApprovalCard
       key={action.id}
-      className={`mt-2 rounded-lg border p-3 ${
-        action.status === 'pending'
-          ? 'border-amber-300 bg-amber-50'
-          : action.status === 'executed'
-            ? 'border-emerald-200 bg-emerald-50'
-            : 'border-slate-200 bg-slate-50'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Wrench className="h-3.5 w-3.5" />
-            <span className="font-mono">{action.toolName}</span>
-            <Badge variant={action.status === 'pending' ? 'default' : 'secondary'}>
-              {STATUS_LABEL[action.status]}
-            </Badge>
-          </div>
-          <div className="mt-1 text-sm font-medium text-slate-800">{action.summary}</div>
-          {action.result && (
-            <div className="mt-1 text-xs text-slate-600">{action.result}</div>
-          )}
-          {action.errorMessage && (
-            <div className="mt-1 text-xs text-red-600">{action.errorMessage}</div>
-          )}
-        </div>
-        {action.status === 'pending' && (
-          <div className="flex shrink-0 gap-2">
-            <Button
-              size="sm"
-              onClick={() => void handleApprove(action)}
-              disabled={resolvingId === action.id}
-            >
-              {resolvingId === action.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-              批准执行
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setRejectTarget(action);
-                setRejectReason('');
-              }}
-              disabled={resolvingId === action.id}
-            >
-              <X className="h-3.5 w-3.5" />
-              拒绝
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
+      action={action}
+      busy={resolvingId === action.id}
+      onApprove={async () => handleApprove(action)}
+      onReject={async () => {
+        setRejectTarget(action);
+        setRejectReason('');
+      }}
+    />
   );
 
   const renderMessage = (message: CopilotMessage): React.ReactNode => {
     if (message.role === 'tool') {
       return (
         <div key={message.id} className="flex justify-center">
-          <details className="w-full max-w-2xl rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <summary className="cursor-pointer select-none">
-              <span className="font-mono">{message.toolName}</span>
-              <span className="ml-2">{message.toolOk ? '执行成功' : '执行失败'}</span>
-            </summary>
-            <pre className="mt-2 whitespace-pre-wrap break-words font-sans">{message.content}</pre>
-          </details>
+          <div className="w-full max-w-2xl rounded-xl border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] px-3 py-2 text-xs text-[var(--flow-text-2)]">
+            <details>
+              <summary className="cursor-pointer select-none">
+                <span className="flow-mono text-[var(--flow-text-1)]">{message.toolName}</span>
+                <span className="ml-2">{message.toolOk ? '执行成功' : '执行失败'}</span>
+              </summary>
+              <pre className="mt-2 whitespace-pre-wrap break-words font-sans text-[var(--flow-text-2)]">{message.content}</pre>
+            </details>
+            <AgentTrace
+              steps={[{
+                id: `${message.id}-tool`,
+                label: message.toolOk ? '读取真实店铺数据' : '读取数据失败',
+                tool: message.toolName,
+                status: message.toolOk ? 'done' : 'failed',
+                detail: message.toolArgs ? '参数已校验' : undefined,
+              }]}
+              defaultOpen={false}
+            />
+          </div>
         </div>
       );
     }
@@ -603,18 +574,18 @@ const CopilotPage: React.FC = () => {
 
     return (
       <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-[85%] ${isUser ? 'order-2' : ''}`}>
+        <div className={`min-w-0 max-w-[85%] ${isUser ? 'order-2' : ''}`}>
           <div
             className={`rounded-2xl px-4 py-2.5 text-sm ${
               isUser
-                ? 'bg-[#0B1F3A] text-white'
-                : 'border border-slate-200 bg-white text-slate-800'
+                ? 'bg-[var(--flow-accent)] text-[var(--flow-accent-ink)]'
+                : 'border border-[var(--flow-line-1)] bg-[var(--flow-surface-1)] text-[var(--flow-text-1)]'
             }`}
           >
             {isUser ? (
               <div className="whitespace-pre-wrap break-words">{message.content}</div>
             ) : (
-              <Markdown className="prose-sm max-w-none">{message.content}</Markdown>
+              <Markdown className="flow-body prose-sm max-w-none text-[var(--flow-text-1)]">{message.content}</Markdown>
             )}
           </div>
           {action && renderActionCard(action)}
@@ -624,668 +595,89 @@ const CopilotPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-150px)] min-h-[560px] gap-4">
-      {/* 会话列表 */}
-      <Card className="hidden w-64 shrink-0 flex-col overflow-hidden md:flex">
-        <div className="flex items-center justify-between border-b p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <Bot className="h-4 w-4" />
-            对话
-          </div>
-          <Button size="sm" variant="outline" onClick={() => void handleNewConversation()}>
-            <MessageSquarePlus className="h-4 w-4" />
-            新建
-          </Button>
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-1 p-2">
-            {loadingList && (
-              <div className="flex items-center gap-2 px-2 py-3 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> 加载中
-              </div>
-            )}
-            {!loadingList && conversations.length === 0 && (
-              <div className="px-2 py-3 text-sm text-slate-500">还没有对话，直接开始提问即可。</div>
-            )}
-            {conversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`group flex items-center gap-1 rounded-md px-2 py-2 text-sm ${
-                  activeId === conversation.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 truncate text-left"
-                  onClick={() => void loadConversation(conversation.id)}
-                >
-                  {conversation.title}
-                  {(conversation.pendingActionCount ?? 0) > 0 && (
-                    <Badge className="ml-2" variant="secondary">
-                      {conversation.pendingActionCount} 待确认
-                    </Badge>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  aria-label="删除对话"
-                  className="hidden shrink-0 text-slate-400 hover:text-red-500 group-hover:block"
-                  onClick={() => void handleDeleteConversation(conversation.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-
-        {/* 店铺巡检：常驻左侧，随时可点一条让副驾处理 */}
-        <div className="border-t p-2">
-          <div className="mb-1 flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-              店铺巡检
-              {(insights?.insights.length ?? 0) > 0 && (
-                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-                  {insights?.insights.length}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                aria-label="导购漏斗"
-                className="text-slate-400 hover:text-slate-600"
-                onClick={() => void openFunnel()}
-              >
-                <TrendingUp className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                aria-label="巡检设置"
-                className="text-slate-400 hover:text-slate-600"
-                onClick={() => void openThresholds()}
-              >
-                <Settings2 className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                aria-label="刷新巡检"
-                className="text-slate-400 hover:text-slate-600"
-                onClick={() => void fetchInsights()}
-                disabled={insightsLoading}
-              >
-                <RefreshCw className={`h-3 w-3 ${insightsLoading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-          </div>
-          <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-            {insightsLoading && !insights && (
-              <div className="px-1 py-2 text-xs text-slate-400">正在检查…</div>
-            )}
-            {insights && insights.insights.length === 0 && (
-              <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700">
-                暂无异常
-              </div>
-            )}
-            {(insights?.insights ?? []).map((insight: CopilotInsight) => (
-              <button
-                key={insight.id}
-                type="button"
-                className={`block w-full rounded border px-2 py-1.5 text-left text-xs hover:brightness-[0.97] ${
-                  insight.severity === 'critical'
-                    ? 'border-red-200 bg-red-50 text-red-800'
-                    : insight.severity === 'warning'
-                      ? 'border-amber-200 bg-amber-50 text-amber-900'
-                      : 'border-slate-200 bg-slate-50 text-slate-700'
-                }`}
-                title={insight.detail}
-                onClick={() => void handleSend(insight.prompt)}
-                disabled={sending}
-              >
-                <div className="font-medium">{insight.title}</div>
-                <div className="mt-0.5 line-clamp-2 text-[11px] opacity-80">{insight.detail}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </Card>
+    <div className="flow-dark flow-radial-glow flex h-[calc(100vh-56px)] min-h-[560px] gap-3 -m-4 p-3 lg:-m-6 lg:p-4">
+      {/* 会话列表与巡检 */}
+      <ConversationSidebar
+        conversations={conversations}
+        activeId={activeId}
+        loadingList={loadingList}
+        insights={insights}
+        insightsLoading={insightsLoading}
+        sending={sending}
+        onNew={() => void handleNewConversation()}
+        onSelect={(id) => void loadConversation(id)}
+        onDelete={(id) => void handleDeleteConversation(id)}
+        onRefreshInsights={() => void fetchInsights()}
+        onOpenFunnel={() => void openFunnel()}
+        onOpenThresholds={() => void openThresholds()}
+        onInsightClick={(prompt) => void handleSend(prompt)}
+      />
 
       {/* 对话区 */}
-      <Card className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0B1F3A] text-white">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-800">AI 运营副驾</div>
-              <div className="text-xs text-slate-500">
-                读取真实店铺数据 · 写操作需你确认后执行
-              </div>
-            </div>
+      <ChatPanel
+        hasMessages={Boolean(detail && detail.messages.length > 0)}
+        loadingDetail={loadingDetail}
+        sending={sending}
+        input={input}
+        bottomRef={bottomRef}
+        onInputChange={setInput}
+        onSend={(text) => void handleSend(text)}
+        onNew={() => void handleNewConversation()}
+      >
+        {detail?.messages.map(renderMessage)}
+
+        {pendingBatchIds.length > 0 && (
+          <div className="space-y-2 border-t border-slate-200 pt-3">
+            {pendingBatchIds.map((batchId) => renderBatchCard(batchId))}
           </div>
-          <Button size="sm" variant="outline" className="md:hidden" onClick={() => void handleNewConversation()}>
-            <MessageSquarePlus className="h-4 w-4" />
-          </Button>
-        </div>
+        )}
+      </ChatPanel>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-4 p-4">
-            {(!detail || detail.messages.length === 0) && !loadingDetail && (
-              <div className="mx-auto max-w-2xl py-10 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B1F3A] text-white">
-                  <Bot className="h-7 w-7" />
-                </div>
-                <h2 className="text-lg font-semibold text-slate-800">今天想处理什么？</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  副驾会先查真实数据再回答；发货、退款、发券等写操作一律要你点确认。
-                </p>
-                <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {QUICK_PROMPTS.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => void handleSend(item.prompt)}
-                      disabled={sending}
-                    >
-                      <span>{item.label}</span>
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {loadingDetail && (
-              <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> 加载对话
-              </div>
-            )}
+      <FunnelDialog
+        open={funnelOpen}
+        onOpenChange={setFunnelOpen}
+        funnel={funnel}
+        funnelLoading={funnelLoading}
+        demandGaps={demandGaps}
+        productFunnel={productFunnel}
+        draftingKeyword={draftingKeyword}
+        auditResult={auditResult}
+        auditing={auditing}
+        backfilling={backfilling}
+        copyAudit={copyAudit}
+        copyAuditing={copyAuditing}
+        onAnalyze={() => {
+          setFunnelOpen(false);
+          void handleSend(
+            `买家在导购里搜了这些词但店里没有：${demandGaps.map((gap) => gap.keyword).join('、')}。请基于真实需求给出补货/上架建议`,
+          );
+        }}
+        onCreateDraft={(keyword) => void createDraft(keyword)}
+        onAudit={() => void auditActive()}
+        onBackfill={() => void backfillAll()}
+        onCopyAudit={() => void runCopyAudit()}
+        onMarkReviewed={(productId) => void markReviewed(productId)}
+      />
 
-            {detail?.messages.map(renderMessage)}
 
-            {pendingBatchIds.length > 0 && (
-              <div className="space-y-2 border-t border-slate-200 pt-3">
-                {pendingBatchIds.map((batchId) => renderBatchCard(batchId))}
-              </div>
-            )}
-
-            {sending && (
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> 副驾正在查询与思考…
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        </ScrollArea>
-
-        <CardContent className="border-t p-3">
-          <div className="flex items-end gap-2">
-            <Textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder="例如：把订单 ORD... 标记为已发货；或：哪些商品库存偏低？"
-              rows={2}
-              className="resize-none"
-              disabled={sending}
-            />
-            <Button
-              onClick={() => void handleSend()}
-              disabled={sending || input.trim().length === 0}
-              className="h-10"
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              发送
-            </Button>
-          </div>
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-            <ShieldAlert className="h-3.5 w-3.5" />
-            写操作会先生成待确认动作，未经你批准不会执行
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={funnelOpen} onOpenChange={setFunnelOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>AI 导购转化漏斗（近 30 天）</DialogTitle>
-            <DialogDescription>按会话去重统计；数据来自导购实际对话与加购确认。</DialogDescription>
-          </DialogHeader>
-          {funnelLoading && !funnel && (
-            <div className="flex items-center gap-2 py-6 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
-            </div>
-          )}
-          {funnel && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                {funnel.stages.map((stage, index) => {
-                  const max = funnel.stages[0]?.sessions || 1;
-                  const width = Math.max(4, Math.round((stage.sessions / max) * 100));
-                  return (
-                    <div key={stage.stage}>
-                      <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                        <span>
-                          {index + 1}. {stage.label}
-                        </span>
-                        <span>
-                          {stage.sessions} 会话
-                          {index > 0 && (
-                            <span className="ml-2 text-slate-400">
-                              转化 {(stage.conversionFromPrevious * 100).toFixed(1)}%
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="h-2.5 w-full rounded bg-slate-100">
-                        <div
-                          className="h-2.5 rounded bg-[#00C2B8]"
-                          style={{ width: `${width}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                整体转化（打开 → 下单）：
-                <span className="ml-1 font-semibold text-[#0B1F3A]">
-                  {(funnel.overallConversion * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div>
-                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span>需求缺口（搜索零结果的词，近 90 天）</span>
-                  {demandGaps.length > 0 && (
-                    <button
-                      type="button"
-                      className="text-xs font-normal text-[#00C2B8] hover:underline"
-                      onClick={() => {
-                        setFunnelOpen(false);
-                        void handleSend(
-                          `买家在导购里搜了这些词但店里没有：${demandGaps.map((gap) => gap.keyword).join('、')}。请基于真实需求给出补货/上架建议`,
-                        );
-                      }}
-                    >
-                      让副驾分析
-                    </button>
-                  )}
-                </div>
-                {demandGaps.length === 0 ? (
-                  <div className="text-xs text-slate-400">暂无零结果搜索</div>
-                ) : (
-                  <div className="space-y-1">
-                    {demandGaps.map((gap) => (
-                      <div key={gap.keyword} className="flex items-center justify-between gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-                        <span className="min-w-0 flex-1 truncate">{gap.keyword}</span>
-                        <span className="shrink-0 text-amber-700">{gap.misses} 次 · {gap.sessions} 人</span>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                          disabled={draftingKeyword === gap.keyword}
-                          onClick={() => void createDraft(gap.keyword)}
-                        >
-                          {draftingKeyword === gap.keyword ? '生成中…' : '建草稿'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">商品级漏斗（被推荐 → 加购，按推荐量排序）</div>
-                {!productFunnel || productFunnel.items.length === 0 ? (
-                  <div className="text-xs text-slate-400">暂无商品级数据</div>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto rounded border border-slate-200">
-                    <table className="w-full text-[11px]">
-                      <thead className="bg-slate-50 text-slate-500">
-                        <tr>
-                          <th className="px-2 py-1 text-left font-medium">商品</th>
-                          <th className="px-1 py-1 text-right font-medium">推荐</th>
-                          <th className="px-1 py-1 text-right font-medium">加购</th>
-                          <th className="px-1 py-1 text-right font-medium">转化</th>
-                          <th className="px-2 py-1 text-right font-medium">库存</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productFunnel.items.map((item) => (
-                          <tr key={item.productId} className="border-t border-slate-100">
-                            <td className="max-w-[140px] truncate px-2 py-1 text-slate-700">{item.title}</td>
-                            <td className="px-1 py-1 text-right text-slate-600">{item.recommendedSessions}</td>
-                            <td className="px-1 py-1 text-right text-slate-600">{item.cartSessions}</td>
-                            <td className={`px-1 py-1 text-right ${item.cartRate < 0.2 ? 'text-red-600' : 'text-emerald-600'}`}>
-                              {(item.cartRate * 100).toFixed(0)}%
-                            </td>
-                            <td className="px-2 py-1 text-right text-slate-500">{item.totalStock}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span>在售商品体检</span>
-                  <div className="flex items-center gap-2">
-                    {auditResult && auditResult.length > 0 && (
-                      <button
-                        type="button"
-                        className="text-xs font-normal text-indigo-600 hover:underline"
-                        onClick={() => void backfillAll()}
-                        disabled={backfilling}
-                      >
-                        {backfilling ? '补全中…' : '一键补全文案'}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="text-xs font-normal text-[#00C2B8] hover:underline"
-                      onClick={() => void auditActive()}
-                      disabled={auditing}
-                    >
-                      {auditing ? '检查中…' : '立即检查'}
-                    </button>
-                  </div>
-                </div>
-                {auditResult === null ? (
-                  <div className="text-xs text-slate-400">点击检查，找出信息不完整的历史在售商品</div>
-                ) : auditResult.length === 0 ? (
-                  <div className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
-                    全部在售商品信息完整
-                  </div>
-                ) : (
-                  <div className="max-h-32 space-y-1 overflow-y-auto">
-                    {auditResult.map((item) => (
-                      <div key={item.id} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-                        <div className="font-medium">{item.title}</div>
-                        <div className="opacity-80">缺：{item.missing.join('、')}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span>AI 文案质量抽检</span>
-                  <button
-                    type="button"
-                    className="text-xs font-normal text-[#00C2B8] hover:underline"
-                    onClick={() => void runCopyAudit()}
-                    disabled={copyAuditing}
-                  >
-                    {copyAuditing ? '抽检中…' : '开始抽检'}
-                  </button>
-                </div>
-                {copyAudit === null ? (
-                  <div className="text-xs text-slate-400">对 AI 生成的文案做启发式质量检查</div>
-                ) : copyAudit.total === 0 ? (
-                  <div className="text-xs text-slate-400">暂无 AI 生成的文案</div>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="text-xs text-slate-600">
-                      共 {copyAudit.total} 个，待复核 {copyAudit.needsReview} 个，平均分 {copyAudit.averageScore}
-                    </div>
-                    <div className="max-h-32 space-y-1 overflow-y-auto">
-                      {copyAudit.items.map((item) => (
-                        <div key={item.productId} className={`rounded border px-2 py-1 text-xs ${item.needsReview ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
-                            <span className="shrink-0">{item.score} 分</span>
-                            {item.needsReview && (
-                              <button
-                                type="button"
-                                className="shrink-0 rounded border border-amber-300 bg-white px-1.5 py-0.5 text-[11px] hover:bg-amber-100"
-                                onClick={() => void markReviewed(item.productId)}
-                              >
-                                复核通过
-                              </button>
-                            )}
-                          </div>
-                          {item.issues.length > 0 && (
-                            <div className="mt-0.5 opacity-80">{item.issues.map((issue) => issue.label).join('、')}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-slate-600">买家热搜词 TOP 10</div>
-                {funnel.topQueries.length === 0 ? (
-                  <div className="text-xs text-slate-400">暂无搜索记录</div>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {funnel.topQueries.map((item) => (
-                      <Badge key={item.keyword} variant="secondary" className="text-xs">
-                        {item.keyword} · {item.count}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFunnelOpen(false)}>
-              关闭
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={thresholdsOpen} onOpenChange={setThresholdsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>巡检设置</DialogTitle>
-            <DialogDescription>调整告警阈值，保存后立即生效（留空或超范围会被拒绝）。</DialogDescription>
-          </DialogHeader>
-          {watch && (
-            <div className="mb-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-slate-700">定时巡检</div>
-                  <div className="text-xs text-slate-500">后台按间隔自动巡检，只记录新增告警（默认关闭）</div>
-                </div>
-                <Switch
-                  checked={watch.enabled}
-                  disabled={watchSaving}
-                  onCheckedChange={(checked) => void saveWatch({ enabled: checked })}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-600">间隔（分钟，5-1440）</span>
-                <Input
-                  type="number"
-                  className="w-24"
-                  value={watch.intervalMinutes}
-                  disabled={watchSaving}
-                  onChange={(event) => setWatch({ ...watch, intervalMinutes: Number(event.target.value) })}
-                  onBlur={() => void saveWatch({ intervalMinutes: watch.intervalMinutes })}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-slate-600">通知渠道</span>
-                <select
-                  className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
-                  value={watch.notifyKind}
-                  disabled={watchSaving}
-                  onChange={(event) => {
-                    const kind = event.target.value as 'webhook' | 'email' | 'none';
-                    setWatch({ ...watch, notifyKind: kind });
-                    void saveWatch({ notifyKind: kind });
-                  }}
-                >
-                  <option value="none">只写日志</option>
-                  <option value="webhook">Webhook（飞书/企微/钉钉/Slack）</option>
-                  <option value="email">邮件（SMTP）</option>
-                </select>
-              </div>
-              {watch.notifyKind === 'webhook' && (
-                <>
-                  <Input
-                    placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-                    value={watch.notifyUrl ?? ''}
-                    disabled={watchSaving}
-                    onChange={(event) => setWatch({ ...watch, notifyUrl: event.target.value })}
-                    onBlur={() => void saveWatch({ notifyUrl: watch.notifyUrl ?? '' })}
-                  />
-                  <label className="flex items-center gap-2 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={watch.notifyOnlyOnNew}
-                      disabled={watchSaving}
-                      onChange={(event) => {
-                        const onlyNew = event.target.checked;
-                        setWatch({ ...watch, notifyOnlyOnNew: onlyNew });
-                        void saveWatch({ notifyOnlyOnNew: onlyNew });
-                      }}
-                    />
-                    仅在出现新增告警时通知
-                  </label>
-                </>
-              )}
-              {watch.notifyKind === 'email' && (
-                <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
-                  {[
-                    { key: 'host' as const, label: 'SMTP 主机', placeholder: 'smtp.example.com' },
-                    { key: 'port' as const, label: '端口', placeholder: '587' },
-                    { key: 'from' as const, label: '发件人', placeholder: 'bot@example.com' },
-                    { key: 'to' as const, label: '收件人', placeholder: 'owner@example.com' },
-                    { key: 'user' as const, label: '用户名（可选）', placeholder: 'bot@example.com' },
-                    { key: 'pass' as const, label: '密码（可选）', placeholder: '••••••' },
-                  ].map((field) => (
-                    <div key={field.key} className="flex items-center justify-between gap-2">
-                      <span className="shrink-0 text-xs text-slate-600">{field.label}</span>
-                      <Input
-                        className="h-8 flex-1 text-xs"
-                        placeholder={field.placeholder}
-                        value={
-                          field.key === 'port'
-                            ? String(watch.notifySmtp?.port ?? 587)
-                            : String(watch.notifySmtp?.[field.key] ?? '')
-                        }
-                        disabled={watchSaving}
-                        onChange={(event) => {
-                          const smtp = {
-                            host: watch.notifySmtp?.host ?? '',
-                            port: watch.notifySmtp?.port ?? 587,
-                            secure: watch.notifySmtp?.secure ?? false,
-                            user: watch.notifySmtp?.user,
-                            pass: watch.notifySmtp?.pass,
-                            from: watch.notifySmtp?.from ?? '',
-                            to: watch.notifySmtp?.to ?? '',
-                          };
-                          if (field.key === 'port') {
-                            smtp.port = Number(event.target.value) || 587;
-                          } else {
-                            (smtp as Record<string, unknown>)[field.key] = event.target.value;
-                          }
-                          setWatch({ ...watch, notifySmtp: smtp });
-                        }}
-                        onBlur={() => void saveWatch({ notifySmtp: watch.notifySmtp })}
-                      />
-                    </div>
-                  ))}
-                  <label className="flex items-center gap-2 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={watch.notifySmtp?.secure ?? false}
-                      disabled={watchSaving}
-                      onChange={(event) => {
-                        const secure = event.target.checked;
-                        if (!watch.notifySmtp) return;
-                        const next = { ...watch.notifySmtp, secure };
-                        setWatch({ ...watch, notifySmtp: next });
-                        void saveWatch({ notifySmtp: next });
-                      }}
-                    />
-                    使用 SSL/TLS（465 端口通常需要）
-                  </label>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-600">邮件主题模板</span>
-                    <Input
-                      className="h-8 flex-1 text-xs"
-                      placeholder="【Flow 店铺巡检】{{count}} 项待处理"
-                      value={watch.notifySubjectTemplate}
-                      disabled={watchSaving}
-                      onChange={(event) => setWatch({ ...watch, notifySubjectTemplate: event.target.value })}
-                      onBlur={() => void saveWatch({ notifySubjectTemplate: watch.notifySubjectTemplate })}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void loadPreview('markdown')} disabled={previewLoading}>
-                      预览 markdown
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => void loadPreview('html')} disabled={previewLoading}>
-                      预览 HTML
-                    </Button>
-                  </div>
-                  {preview && (
-                    <div className="mt-1 rounded border border-slate-200 bg-slate-900 p-2">
-                      <div className="mb-1 text-[11px] text-slate-400">主题：{preview.subject}</div>
-                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] text-slate-100">
-                        {preview.format === 'html' ? preview.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : preview.body}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              )}
-              <Button size="sm" variant="outline" className="w-full" onClick={() => void runWatch()} disabled={watchRunning}>
-                {watchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                立即执行一次巡检
-              </Button>
-            </div>
-          )}
-          {thresholdsDraft && (
-            <div className="space-y-3">
-              {[
-                { key: 'lowStock' as const, label: '低库存阈值（件）', hint: '总库存低于该值告警' },
-                { key: 'pendingRefundHours' as const, label: '退款超时（小时）', hint: '待审批退款超过该时长告警' },
-                { key: 'unpaidOrderHours' as const, label: '未支付超时（小时）', hint: '订单创建后超过该时长未付告警' },
-                { key: 'staleShippedDays' as const, label: '发货未签收（天）', hint: '发货超过该天数仍为已发货告警' },
-              ].map((field) => (
-                <div key={field.key} className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-slate-700">{field.label}</div>
-                    <div className="text-xs text-slate-500">{field.hint}</div>
-                  </div>
-                  <Input
-                    type="number"
-                    className="w-24"
-                    value={thresholdsDraft[field.key]}
-                    onChange={(event) =>
-                      setThresholdsDraft({
-                        ...thresholdsDraft,
-                        [field.key]: Number(event.target.value),
-                      })
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setThresholdsOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={() => void saveThresholds()} disabled={thresholdsSaving}>
-              {thresholdsSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <WatchSettingsDialog
+        open={thresholdsOpen}
+        onOpenChange={setThresholdsOpen}
+        watch={watch}
+        watchSaving={watchSaving}
+        watchRunning={watchRunning}
+        thresholdsDraft={thresholdsDraft}
+        thresholdsSaving={thresholdsSaving}
+        preview={preview}
+        previewLoading={previewLoading}
+        onWatchChange={setWatch}
+        onSaveWatch={(patch) => void saveWatch(patch)}
+        onRunWatch={() => void runWatch()}
+        onLoadPreview={(format) => void loadPreview(format)}
+        onThresholdsChange={setThresholdsDraft}
+        onSaveThresholds={() => void saveThresholds()}
+      />
 
       <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
         <DialogContent>

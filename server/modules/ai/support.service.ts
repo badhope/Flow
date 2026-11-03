@@ -4,6 +4,9 @@ import { DRIZZLE_DATABASE, type Database } from '../../database/database.provide
 import { AiGatewayService, type ChatMessage } from './ai-gateway.service';
 import { products, productVariants, inquiryMessages, inquirySessions, orders, orderFulfillments } from '../../database/schema';
 import type { SupportChatRequest, SupportChatResponse } from '../../../shared/api.interface';
+import type { SellerActor } from './seller-scope';
+
+type SupportActor = SellerActor & { sessionId?: string };
 
 const MAX_MESSAGE_LENGTH = 2000;
 const SESSION_ID_PATTERN = /^[\w-]{8,64}$/;
@@ -51,7 +54,14 @@ export class SupportService {
     private readonly aiGateway: AiGatewayService,
   ) {}
 
-  async chat(dto: SupportChatRequest, userId?: string): Promise<SupportChatResponse> {
+  async chat(dto: SupportChatRequest, actorOrUserId?: SupportActor | string): Promise<SupportChatResponse> {
+    const actor: SupportActor = typeof actorOrUserId === 'string' ? { userId: actorOrUserId } : (actorOrUserId ?? {});
+    if (actor.sessionId && actor.sessionId !== dto.sessionId) {
+      throw new BadRequestException('会话标识不一致');
+    }
+    if (!actor.userId && !actor.sessionId) {
+      throw new BadRequestException('会话未初始化');
+    }
     const message = dto.message?.trim() ?? '';
     if (!message) {
       throw new BadRequestException('消息不能为空');
@@ -67,10 +77,14 @@ export class SupportService {
     // RAG: 匹配店铺政策 FAQ
     const matchedFaqs = this.matchFaqs(messageLower);
 
+    // 公开客服只能读取当前用户/当前匿名 session 的会话与订单，不能信任 body 单独提供的 ID。
+    const sessionAllowed = await this.assertSessionAccess(dto.sessionId, actor);
+    if (!sessionAllowed) throw new BadRequestException('会话不存在或无权访问');
+
     // 查询订单状态（如果有 orderNo）
     let orderInfo = '';
     if (dto.orderNo) {
-      orderInfo = await this.getOrderInfo(dto.orderNo);
+      orderInfo = await this.getOrderInfo(dto.orderNo, actor);
     }
 
     // 读取对话历史
@@ -110,7 +124,8 @@ export class SupportService {
       temperature: 0.5,
       maxTokens: 800,
       agent: 'support',
-      userId,
+      userId: actor.userId,
+      role: actor.role,
     });
 
     // 收集 sources
@@ -125,7 +140,7 @@ export class SupportService {
     const replyText = reply.trim();
 
     // 会话落库：卖家「咨询管理」可见完整对话，同时作为后续多轮的上下文来源
-    await this.persistConversation(dto.sessionId, message, replyText, userId);
+    await this.persistConversation(dto.sessionId, message, replyText, actor.userId);
 
     return {
       reply: replyText,
@@ -245,7 +260,20 @@ export class SupportService {
     );
   }
 
-  private async getOrderInfo(orderNo: string): Promise<string> {
+  private async assertSessionAccess(sessionId: string, actor: SupportActor): Promise<boolean> {
+    const rows = await this.db
+      .select({ userId: inquirySessions.userId })
+      .from(inquirySessions)
+      .where(eq(inquirySessions.sessionId, sessionId))
+      .limit(1);
+    if (rows.length === 0) {
+      // 新会话允许首次写入；但跨已有会话必须拒绝。
+      return Boolean(actor.userId || actor.sessionId);
+    }
+    return actor.userId ? rows[0].userId === actor.userId : Boolean(actor.sessionId === sessionId);
+  }
+
+  private async getOrderInfo(orderNo: string, actor: SupportActor): Promise<string> {
     try {
       const orderRows = await this.db
         .select()
@@ -257,6 +285,10 @@ export class SupportService {
         return `订单号 ${orderNo} 未找到。`;
       }
       const order = orderRows[0];
+      const ownsOrder = actor.userId
+        ? order.userId === actor.userId
+        : this.orderSnapshotMatchesSession(order.addressSnapshot, actor.sessionId);
+      if (!ownsOrder) return '订单号未找到。';
 
       // Get fulfillments for tracking info
       const fulfillments = await this.db
@@ -305,6 +337,16 @@ export class SupportService {
       ].filter(Boolean).join('\n');
     } catch {
       return '';
+    }
+  }
+
+  private orderSnapshotMatchesSession(snapshot: string | null, sessionId?: string): boolean {
+    if (!snapshot || !sessionId) return false;
+    try {
+      const parsed = JSON.parse(snapshot) as { sessionId?: string };
+      return parsed.sessionId === sessionId;
+    } catch {
+      return false;
     }
   }
 

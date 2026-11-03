@@ -453,7 +453,12 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+const onListen = () => {
   console.log(`[mock] providers listening on http://127.0.0.1:${PORT}`);
   console.log(`[mock] webhook callback base: ${APP_WEBHOOK_BASE}`);
-});
+};
+if (process.env.MOCK_HOST) {
+  server.listen(PORT, process.env.MOCK_HOST, onListen);
+} else {
+  server.listen(PORT, onListen);
+}

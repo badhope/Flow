@@ -28,6 +28,7 @@ import type {
 } from '../../../shared/api.interface';
 
 import { StripeService } from './stripe.service';
+import { isDemoPaymentAllowed } from './demo-gate';
 import { PayPalService } from './paypal.service';
 import { AuditService } from '../audit/audit.service';
 import { canAccessSellerResource } from '../../common/tenant/tenant-scope';
@@ -386,6 +387,13 @@ export class PaymentsService {
       };
     }
 
+    // 演示支付环境门禁（fail-closed）：仅 development/test 放行，
+    // 防止未配渠道的生产环境被 provider=demo 直接置 paid 白拿订单。
+    if (!isDemoPaymentAllowed({ nodeEnv: process.env.NODE_ENV, allowDemoPayment: process.env.ALLOW_DEMO_PAYMENT })) {
+      throw new ForbiddenException(
+        '演示支付仅在 development/test 环境可用：生产请配置真实支付渠道（Stripe/PayPal）',
+      );
+    }
     return this.processDemoPayment(orderId, provider, order, auditMeta);
   }
 
@@ -641,7 +649,9 @@ export class PaymentsService {
     return {
       stripeConfigured,
       paypalConfigured,
-      demoMode: !stripeConfigured && !paypalConfigured,
+      demoMode: !stripeConfigured
+        && !paypalConfigured
+        && isDemoPaymentAllowed({ nodeEnv: process.env.NODE_ENV, allowDemoPayment: process.env.ALLOW_DEMO_PAYMENT }),
       stripePublishableKey: this.stripeService.getPublishableKey(),
     };
   }

@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 
 import { RolesGuard } from '../../common/guards/roles.guard';
+import type { SellerActor } from './seller-scope';
 import { AiSettingsService, type AiSettingsTestResult, type AiSettingsView } from './ai-settings.service';
 import {
   CustomAgentsService,
@@ -38,8 +39,8 @@ export class AiSettingsController {
   }
 
   @Get('settings')
-  async getSettings(): Promise<AiSettingsView> {
-    return this.settingsService.get();
+  async getSettings(@Req() req: Request): Promise<AiSettingsView> {
+    return this.settingsService.get(this.getActor(req));
   }
 
   @Put('settings')
@@ -47,17 +48,17 @@ export class AiSettingsController {
     @Req() req: Request,
     @Body() dto: UpdateAiSettingsDto,
   ): Promise<AiSettingsView> {
-    return this.settingsService.update(dto, this.getActorId(req));
+    return this.settingsService.update(dto, this.getActor(req));
   }
 
   @Post('settings/test')
-  async testSettings(): Promise<AiSettingsTestResult> {
-    return this.settingsService.test();
+  async testSettings(@Req() req: Request): Promise<AiSettingsTestResult> {
+    return this.settingsService.test(this.getActor(req));
   }
 
   @Get('agents')
-  async listAgents(): Promise<AgentListResult> {
-    return this.customAgentsService.list();
+  async listAgents(@Req() req: Request): Promise<AgentListResult> {
+    return this.customAgentsService.list(this.getActor(req));
   }
 
   @Post('agents')
@@ -74,7 +75,7 @@ export class AiSettingsController {
     @Param('id') id: string,
     @Body() dto: UpdateAgentDto,
   ): Promise<CustomAgentView> {
-    return this.customAgentsService.update(id, dto, this.getActorId(req));
+    return this.customAgentsService.update(id, dto, this.getActor(req));
   }
 
   @Delete('agents/:id')
@@ -82,7 +83,7 @@ export class AiSettingsController {
     @Req() req: Request,
     @Param('id') id: string,
   ): Promise<{ success: boolean }> {
-    return this.customAgentsService.remove(id, this.getActorId(req));
+    return this.customAgentsService.remove(id, this.getActor(req));
   }
 
   @Post('agents/:id/run')
@@ -91,6 +92,10 @@ export class AiSettingsController {
     @Param('id') id: string,
     @Body() dto: RunAgentDto,
   ): Promise<RunAgentResult> {
-    return this.customAgentsService.run(id, dto, this.getActorId(req));
+    return this.customAgentsService.run(id, dto, this.getActor(req));
+  }
+
+  private getActor(req: Request): SellerActor {
+    return { userId: req.user?.id, role: req.user?.role };
   }
 }

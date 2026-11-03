@@ -1,0 +1,316 @@
+/* ============================================================================
+   Flow · AI 原生设计语言 v2
+   深色优先 · 电光酸橙强调色 · 玻璃浮层 · 可辨识的 AI 产品形态
+   作用域：.flow-dark 包裹的容器（卖家工作台 / 首页首屏），买家浏览区保持浅色可读
+   ========================================================================== */
+
+:root {
+  /* 表面层级：near-black 而非纯黑，带冷调 */
+  --flow-bg: #07080b;
+  --flow-surface-1: #0b0d12;
+  --flow-surface-2: #10131a;
+  --flow-surface-3: #161a22;
+
+  /* 描边：三级透明度，替代统一 gray-200 */
+  --flow-line-1: rgba(255, 255, 255, 0.06);
+  --flow-line-2: rgba(255, 255, 255, 0.1);
+  --flow-line-3: rgba(255, 255, 255, 0.16);
+
+  /* 文字：三级 */
+  --flow-text-1: #f2f4f8;
+  --flow-text-2: #9ca3b0;
+  --flow-text-3: #5f6675;
+
+  /* 强调：电光酸橙，占用面积 <= 10% */
+  --flow-accent: #c6ff4a;
+  --flow-accent-ink: #0a0c08;
+  --flow-accent-soft: rgba(198, 255, 74, 0.12);
+
+  /* 买家端主墨色（导航/页脚/深色块），比纯黑更有品牌感 */
+  --flow-ink: #0b1f3a;
+
+  /* 语义色 */
+  --flow-cyan: #22d3c5;
+  --flow-warn: #ffb020;
+  --flow-danger: #ff5a5f;
+  --flow-ok: #3ddc97;
+
+  /* 玻璃 */
+  --flow-glass: rgba(255, 255, 255, 0.03);
+  --flow-blur: 20px;
+
+  /* 圆角刻度 */
+  --flow-r-1: 4px;
+  --flow-r-2: 8px;
+  --flow-r-3: 12px;
+  --flow-r-4: 16px;
+  --flow-r-5: 24px;
+
+  /* 阴影：暗色下高度靠更亮表面 + 描边，阴影只给浮层 */
+  --flow-e1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --flow-e2: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --flow-e3: 0 24px 64px -16px rgba(0, 0, 0, 0.75);
+  --flow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --flow-glow: 0 0 0 1px rgba(198, 255, 74, 0.35), 0 0 24px -4px rgba(198, 255, 74, 0.35);
+
+  /* 动效 */
+  --flow-t-fast: 120ms;
+  --flow-t-state: 180ms;
+  --flow-t-enter: 320ms;
+  --flow-t-page: 420ms;
+  --flow-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --flow-ease-std: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- 深色作用域：把 shadcn 语义 token 一并切换，组件无需改类名 ---------- */
+.flow-dark {
+  --background: var(--flow-bg);
+  --foreground: var(--flow-text-1);
+  --card: var(--flow-surface-1);
+  --card-foreground: var(--flow-text-1);
+  --popover: var(--flow-surface-2);
+  --popover-foreground: var(--flow-text-1);
+  --primary: var(--flow-accent);
+  --primary-foreground: var(--flow-accent-ink);
+  --secondary: var(--flow-surface-2);
+  --secondary-foreground: var(--flow-text-1);
+  --muted: var(--flow-surface-2);
+  --muted-foreground: var(--flow-text-2);
+  --accent: var(--flow-surface-3);
+  --accent-foreground: var(--flow-text-1);
+  --border: var(--flow-line-1);
+  --input: var(--flow-line-2);
+  --ring: var(--flow-accent);
+  --destructive: var(--flow-danger);
+  --destructive-foreground: #0a0c08;
+  --success: var(--flow-ok);
+  --success-foreground: #06110c;
+  --warning: var(--flow-warn);
+  --warning-foreground: #120c00;
+  --chart-1: var(--flow-accent);
+  --chart-2: var(--flow-cyan);
+  --chart-3: var(--flow-warn);
+  --chart-4: var(--flow-danger);
+  --chart-5: #8fa3bf;
+
+  background-color: var(--flow-bg);
+  color: var(--flow-text-1);
+  color-scheme: dark;
+}
+
+/* ---------- 玻璃浮层 ---------- */
+.flow-glass {
+  background: var(--flow-glass);
+  border: 1px solid var(--flow-line-2);
+  backdrop-filter: blur(var(--flow-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--flow-blur)) saturate(140%);
+  box-shadow: var(--flow-inset), var(--flow-e2);
+}
+
+.flow-glass-hover {
+  transition: border-color var(--flow-t-fast) var(--flow-ease-std),
+    box-shadow var(--flow-t-fast) var(--flow-ease-std),
+    transform var(--flow-t-fast) var(--flow-ease-std);
+}
+.flow-glass-hover:hover {
+  border-color: var(--flow-line-3);
+  box-shadow: var(--flow-inset), var(--flow-e3);
+}
+
+/* ---------- 面板 / 卡片 ---------- */
+.flow-panel {
+  background: var(--flow-surface-1);
+  border: 1px solid var(--flow-line-1);
+  border-radius: var(--flow-r-3);
+}
+
+.flow-panel-raised {
+  background: var(--flow-surface-2);
+  border: 1px solid var(--flow-line-2);
+  border-radius: var(--flow-r-4);
+  box-shadow: var(--flow-e2);
+}
+
+/* 运行中/激活态的外发光 */
+.flow-glow {
+  box-shadow: var(--flow-glow);
+}
+
+/* ---------- 字阶 ---------- */
+.flow-display {
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.flow-h1 {
+  font-size: 2.5rem;
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.flow-h2 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.flow-h3 {
+  font-size: 1.125rem;
+  line-height: 1.35;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+}
+.flow-body {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.flow-caption {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--flow-text-3);
+}
+.flow-data-xl {
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.flow-mono {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 动效 ---------- */
+@keyframes flow-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes flow-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes flow-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+@keyframes flow-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes flow-shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+.flow-enter {
+  animation: flow-enter var(--flow-t-enter) var(--flow-ease-out) both;
+}
+.flow-fade-in {
+  animation: flow-fade var(--flow-t-state) var(--flow-ease-std) both;
+}
+.flow-pulse {
+  animation: flow-pulse-dot 1.4s var(--flow-ease-std) infinite;
+}
+.flow-caret::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--flow-accent);
+  animation: flow-caret 1s step-end infinite;
+}
+.flow-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--flow-surface-2) 0%,
+    var(--flow-surface-3) 50%,
+    var(--flow-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: flow-shimmer 1.6s linear infinite;
+}
+
+/* 列表进入 stagger（最多 6 项，避免长列表延迟累积） */
+.flow-stagger > * {
+  animation: flow-enter var(--flow-t-enter) var(--flow-ease-out) both;
+}
+.flow-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.flow-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.flow-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.flow-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.flow-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.flow-stagger > *:nth-child(n + 6) { animation-delay: 200ms; }
+
+/* ---------- 背景纹理 ---------- */
+.flow-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.flow-radial-glow {
+  background:
+    radial-gradient(680px circle at 18% -10%, rgba(198, 255, 74, 0.09), transparent 62%),
+    radial-gradient(520px circle at 88% 8%, rgba(34, 211, 197, 0.07), transparent 60%);
+}
+
+/* 强调色描边按钮（不依赖 shadcn variant） */
+.flow-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: var(--flow-r-2);
+  background: var(--flow-accent);
+  color: var(--flow-accent-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: transform var(--flow-t-fast) var(--flow-ease-std),
+    filter var(--flow-t-fast) var(--flow-ease-std);
+}
+.flow-btn-accent:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.flow-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: var(--flow-r-2);
+  border: 1px solid var(--flow-line-2);
+  color: var(--flow-text-1);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background var(--flow-t-fast) var(--flow-ease-std),
+    border-color var(--flow-t-fast) var(--flow-ease-std);
+}
+.flow-btn-ghost:hover {
+  background: var(--flow-surface-2);
+  border-color: var(--flow-line-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-enter,
+  .flow-fade-in,
+  .flow-stagger > *,
+  .flow-pulse,
+  .flow-caret::after,
+  .flow-skeleton {
+    animation: flow-fade 120ms linear both;
+  }
+}

@@ -1,4 +1,5 @@
 import { http } from '../lib/http';
+import { getSessionId } from '@/utils/session';
 import type {
   SupportChatRequest,
   SupportChatResponse,
@@ -29,6 +30,7 @@ export async function supportChat(
   const { data } = await http.post<SupportChatResponse>(
     '/api/ai/support/chat',
     payload,
+    { headers: { 'x-session-id': getSessionId() } },
   );
   return data;
 }

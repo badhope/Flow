@@ -12,6 +12,11 @@ import { mergeInsightThresholds } from './copilot-insight-thresholds';
 /** ai_settings 中保存巡检阈值的键（JSON） */
 export const INSIGHT_THRESHOLDS_KEY = 'copilot_insight_thresholds';
 
+function scopedThresholdKey(actor?: { userId?: string; role?: string }): string {
+  if (!actor?.userId || actor.role === 'admin') return INSIGHT_THRESHOLDS_KEY;
+  return `${actor.userId}:${INSIGHT_THRESHOLDS_KEY}`;
+}
+
 /**
  * 店铺巡检：纯 SQL 聚合出的可执行告警，不调用 LLM。
  * 目的是让副驾在卖家提问前就能给出待办清单；每条告警都带一句可直接发给副驾的 prompt。
@@ -20,19 +25,19 @@ export const INSIGHT_THRESHOLDS_KEY = 'copilot_insight_thresholds';
 export class CopilotInsightsService {
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
-  async getThresholds(): Promise<CopilotInsightThresholds> {
+  async getThresholds(actor?: { userId?: string; role?: string }): Promise<CopilotInsightThresholds> {
     const rows = await this.db
       .select({ value: aiSettings.value })
       .from(aiSettings)
-      .where(eq(aiSettings.key, INSIGHT_THRESHOLDS_KEY))
+      .where(eq(aiSettings.key, scopedThresholdKey(actor)))
       .limit(1);
     return mergeInsightThresholds(rows[0]?.value);
   }
 
-  async getInsights(actor?: { sellerId?: string; role?: string }): Promise<CopilotInsightsView> {
-    const thresholds = await this.getThresholds();
-    // 卖家巡检只看本店（管理员不传 sellerId 时看全平台）
-    const sellerId = actor && actor.role !== 'admin' ? actor.sellerId : undefined;
+  async getInsights(actor?: { userId?: string; role?: string }): Promise<CopilotInsightsView> {
+    const thresholds = await this.getThresholds(actor);
+    // 卖家巡检只看本店（管理员不传 userId 时看全平台）
+    const sellerId = actor && actor.role !== 'admin' ? actor.userId : undefined;
     const [lowStock, staleRefunds, unpaidOrders, staleShipments] = await Promise.all([
       this.lowStock(thresholds, sellerId),
       this.staleRefunds(thresholds, sellerId),
@@ -54,9 +59,9 @@ export class CopilotInsightsService {
   /** 保存阈值（叠加在当前配置上；未变化时直接返回，不写库） */
   async updateThresholds(
     input: Partial<CopilotInsightThresholds>,
-    actorId: string,
+    actor: { userId?: string; role?: string },
   ): Promise<CopilotInsightThresholds> {
-    const current = await this.getThresholds();
+    const current = await this.getThresholds(actor);
     const next: CopilotInsightThresholds = { ...current, ...input };
 
     const changed = (Object.keys(next) as Array<keyof CopilotInsightThresholds>)
@@ -66,13 +71,13 @@ export class CopilotInsightsService {
     await this.db
       .insert(aiSettings)
       .values({
-        key: INSIGHT_THRESHOLDS_KEY,
+        key: scopedThresholdKey(actor),
         value: JSON.stringify(next),
-        updatedBy: actorId,
+        updatedBy: actor.userId ?? '',
       })
       .onConflictDoUpdate({
         target: aiSettings.key,
-        set: { value: JSON.stringify(next), updatedBy: actorId, updatedAt: new Date() },
+        set: { value: JSON.stringify(next), updatedBy: actor.userId ?? '', updatedAt: new Date() },
       });
 
     return next;

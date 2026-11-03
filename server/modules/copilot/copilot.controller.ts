@@ -181,11 +181,12 @@ export class CopilotController {
     const parsed = days ? parseInt(days, 10) : 30;
     const safeDays = Number.isFinite(parsed) ? Math.min(365, Math.max(1, parsed)) : 30;
     const actor = this.getActor(req);
-    return this.shopperAnalytics.getFunnel(safeDays, actor.role === 'admin' ? undefined : actor.userId);
+    return this.shopperAnalytics.getFunnel(safeDays, actor);
   }
 
   @Get('shopper-demand-gaps')
   async getShopperDemandGaps(
+    @Req() req: Request,
     @Query('days') days?: string,
     @Query('limit') limit?: string,
   ): Promise<ShopperDemandGap[]> {
@@ -194,12 +195,17 @@ export class CopilotController {
     return this.shopperAnalytics.getDemandGaps(
       Number.isFinite(parsedDays) ? parsedDays : 90,
       Number.isFinite(parsedLimit) ? parsedLimit : 10,
+      this.getActor(req),
     );
   }
 
   @Get('watch')
-  async getWatchSettings(): Promise<WatchSettings> {
-    return this.watchService.getSettings();
+  async getWatchSettings(@Req() req: Request): Promise<WatchSettings> {
+    const settings = await this.watchService.getSettings(this.getActor(req));
+    return {
+      ...settings,
+      notifySmtp: settings.notifySmtp ? { ...settings.notifySmtp, pass: undefined } : undefined,
+    };
   }
 
   @Put('watch')
@@ -210,23 +216,36 @@ export class CopilotController {
     const actor = this.getActor(req);
     const updated = await this.watchService.updateSettings(
       dto as unknown as Partial<import('./copilot-watch.service').WatchSettings>,
-      actor.userId,
+      actor,
     );
     void this.auditService.log({
       action: 'copilot.watch_update',
       entity: 'ai_settings',
       entityId: 'copilot_watch_settings',
-      after: { ...updated },
+      after: {
+        enabled: updated.enabled,
+        intervalMinutes: updated.intervalMinutes,
+        notifyKind: updated.notifyKind,
+        notifySmtp: updated.notifySmtp
+          ? { host: updated.notifySmtp.host, port: updated.notifySmtp.port, from: updated.notifySmtp.from, to: updated.notifySmtp.to, configured: true }
+          : undefined,
+        notifyUrl: updated.notifyUrl ? '[redacted]' : undefined,
+      },
       userId: actor.userId,
       role: actor.role,
     });
-    return updated;
+    return {
+      ...updated,
+      notifySmtp: updated.notifySmtp
+        ? { ...updated.notifySmtp, pass: undefined }
+        : undefined,
+    };
   }
 
   @Post('watch/run')
   async runWatchNow(@Req() req: Request): Promise<{ ran: boolean; message: string }> {
     const actor = this.getActor(req);
-    const result = await this.watchService.runOnce(true);
+    const result = await this.watchService.runOnce(true, actor);
     void this.auditService.log({
       action: 'copilot.watch_run',
       entity: 'ai_settings',
@@ -266,7 +285,7 @@ export class CopilotController {
         productNameZh: input.productNameZh,
         category: input.category,
         targetMarket: '北美市场',
-      }, actor.userId),
+      }, actor),
     );
   }
 
@@ -276,7 +295,7 @@ export class CopilotController {
     @Query('format') format?: string,
   ): Promise<{ format: string; subject: string; body: string }> {
     const safeFormat = format === 'html' || format === 'markdown' ? format : 'plain';
-    const settings = await this.watchService.getSettings();
+    const settings = await this.watchService.getSettings(this.getActor(req));
     const { insights, generatedAt } = await this.insightsService.getInsights(this.getActor(req));
     const at = new Date(generatedAt);
     const subject = renderSubject(settings.notifySubjectTemplate, insights, []);
@@ -285,15 +304,18 @@ export class CopilotController {
   }
 
   @Get('products/copy-quality')
-  async auditAiCopy(@Query('limit') limit?: string) {
+  async auditAiCopy(@Req() req: Request, @Query('limit') limit?: string) {
     const parsed = limit ? parseInt(limit, 10) : 100;
-    return this.productsService.auditAiCopy(Number.isFinite(parsed) ? parsed : 100);
+    return this.productsService.auditAiCopy(
+      Number.isFinite(parsed) ? parsed : 100,
+      this.getActor(req),
+    );
   }
 
   @Post('products/:id/mark-reviewed')
   async markReviewed(@Req() req: Request, @Param('id') id: string) {
     const actor = this.getActor(req);
-    return this.productsService.markCopyReviewed(id, actor.userId);
+    return this.productsService.markCopyReviewed(id, actor);
   }
 
   @Get('shopper-product-funnel')
@@ -308,13 +330,13 @@ export class CopilotController {
     return this.shopperAnalytics.getProductFunnel(
       Number.isFinite(parsedDays) ? parsedDays : 30,
       Number.isFinite(parsedLimit) ? parsedLimit : 20,
-      actor.role === 'admin' ? undefined : actor.userId,
+      actor,
     );
   }
 
   @Get('insights/thresholds')
-  async getInsightThresholds(): Promise<CopilotInsightThresholds> {
-    return this.insightsService.getThresholds();
+  async getInsightThresholds(@Req() req: Request): Promise<CopilotInsightThresholds> {
+    return this.insightsService.getThresholds(this.getActor(req));
   }
 
   @Put('insights/thresholds')
@@ -324,7 +346,7 @@ export class CopilotController {
   ): Promise<CopilotInsightThresholds> {
     const actor = this.getActor(req);
     const sanitized = sanitizeInsightThresholds(dto as Record<string, unknown>);
-    const updated = await this.insightsService.updateThresholds(sanitized, actor.userId);
+    const updated = await this.insightsService.updateThresholds(sanitized, actor);
     void this.auditService.log({
       action: 'copilot.insight_thresholds_update',
       entity: 'ai_settings',

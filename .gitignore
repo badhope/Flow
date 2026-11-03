@@ -21,6 +21,8 @@ out/
 
 # ===== 环境变量（切勿提交真实密钥）=====
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
 .env.development.local
@@ -100,3 +102,11 @@ shots/
 # 品牌资源原始备份（本地保留，不入仓）
 client/src/assets/branding/_orig/
 .aqg/
+
+# Local QA artifacts (generated, not published)
+docs/qa/screens/
+*.log
+docs/qa/journey-report.json
+
+# Local QA audit artifacts (screenshots + report regenerate on demand)
+docs/qa/audit/

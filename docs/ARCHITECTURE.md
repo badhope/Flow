@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 应用 | Flow 出口电商平台（AI 原生跨境出货台） |
-| 版本 | v1.21.1 / 2026-10-24 |
+| 版本 | v1.22.0 / 2026-11-01 |
 | 仓库形态 | Monorepo（client + server + shared + scripts） |
 
 ---
@@ -41,7 +41,7 @@
    │  PostgreSQL 16       │      │  外部 OpenAI 兼容 LLM 端点    │
    │  + pg_trgm (GIN)      │◄────►│  (DeepSeek / 火山方舟 / ...) │
    │  + pg_trgm            │      │  - /v1/chat/completions      │
-   │  Drizzle ORM          │      │  - /v1/embeddings            │
+   │  Drizzle ORM          │      │  - embeddings（未启用）     │
    └──────────────────────┘      └──────────────────────────────┘
                ▲
                │
@@ -65,10 +65,9 @@ Flow/
 │       ├── contexts/      # AuthContext / LanguageContext
 │       └── i18n/          # zh / en / es / pt 四语言
 ├── server/        # NestJS 12 后端
-│   └── src/
-│       ├── modules/       # 25 个业务模块（auth/products/orders/ai/copilot/...）
-│       ├── common/        # middleware / guards / filters
-│       └── database/      # Drizzle schema
+│   ├── modules/       # 业务模块（auth/products/orders/ai/copilot/...）
+│   ├── common/        # middleware / guards / filters
+│   └── database/      # Drizzle schema
 ├── shared/        # 前后端共享 TypeScript 类型与 DTO 接口
 ├── scripts/       # 运维脚本（种子数据 / 备份等）
 ├── docker/        # postgres init.sql（建扩展）
@@ -91,7 +90,7 @@ Flow/
 - **中间件链**：`jwt-auth.middleware`（从 HttpOnly Cookie 或 Authorization 头解析 JWT，挂 `req.user`）→ `csrf-header.middleware`（非 GET 强制 `X-Requested-With`）→ 业务路由。
 - **守卫**：`RolesGuard` 按 `@Roles('seller')` 装饰器校验；买家接口默认登录态即可。
 - **异常**：`exception.filter.ts` 生产环境剥离 stack，仅返 `{ code, message, timestamp }`。
-- **ORM**：Drizzle ORM，启动时自动同步表结构；金额计算统一 `decimal.js`。
+- **ORM**：Drizzle ORM，由 `scripts/db/migrate.mjs` 按 `drizzle/*.sql` 执行版本化迁移；金额计算统一 `decimal.js`。
 
 ---
 
@@ -100,9 +99,9 @@ Flow/
 | 分组 | 表 | 说明 |
 |---|---|---|
 | 账号 | `users` | id / email / password_hash(bcrypt) / role(buyer\|seller) / google_id / created_at |
-| 商品 | `products` | 多语言字段（title_zh/en/es/pt 等）/ price(decimal) / stock / status(active\|inactive) / images |
+| 商品 | `products` | 多语言字段（title_zh/en/es/pt 等）/ price(decimal) / stock / status(draft\|active\|inactive) / images |
 | 商品 | `categories` | 分类树 |
-| 商品 | `product_variants` | SKU 级价格/库存/规格值；`product_embeddings` 为可选扩展（当前版本未启用向量检索，SupportAgent 走 ILIKE 关键词召回） |
+| 商品 | `product_variants` | SKU 级价格/库存/规格值；当前未启用向量检索，SupportAgent 走 ILIKE 关键词召回；向量检索在路线图中 |
 | 交易 | `cart_items` | user_id 或 session_id 双轨，匿名登录后事务合并 |
 | 交易 | `orders` / `order_items` | order_no(nanoid+日期前缀) / status / 金额后端重算 |
 | 交易 | `payments` | provider(stripe\|paypal\|demo) / status / 第三方交易号（唯一索引做 webhook 幂等锚点） |
@@ -150,7 +149,7 @@ OpenAI 兼容端点（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱 ...）
 
 | 层 | 机制 |
 |---|---|
-| 登录 | `POST /api/auth/register` / `/login`：bcrypt 校验 → 签发 JWT（2h）→ **仅** `Set-Cookie: token=...; HttpOnly; Secure(生产); SameSite=Lax; Path=/` |
+| 登录 | `POST /api/auth/register` / `/login`：bcrypt 校验 → 签发 JWT（2h）→ **仅** `Set-Cookie: flow_auth=...; HttpOnly; Secure(生产); SameSite=Lax; Path=/` |
 | 前端 | 彻底移除 localStorage token，所有 fetch 带 `credentials: include` |
 | 鉴权中间件 | 全局 `jwt-auth.middleware` 优先读 Cookie，兼容 `Authorization: Bearer`；未匹配则 401 |
 | CSRF | 全局 `csrf-header.middleware`：所有非 GET 请求必须带 `X-Requested-With: XMLHttpRequest`，缺失 403 |

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -126,7 +127,7 @@ export class CopilotService {
   async sendMessage(userId: string, role: string, conversationId: string, input: string): Promise<CopilotSendResult> {
     const conversation = await this.loadConversation(userId, conversationId);
 
-    if (!(await this.gateway.isConfigured())) {
+    if (!(await this.gateway.isConfigured({ userId, role }))) {
       throw new BadRequestException(
         'AI 模型未配置：请先在「AI 分析中心 → 模型设置」填写模型 API，再使用 AI 运营副驾。',
       );
@@ -171,6 +172,7 @@ export class CopilotService {
       const completion = await this.gateway.chat(messages, {
         agent: 'copilot',
         userId,
+        role,
         temperature: 0.2,
         maxTokens: 1200,
         responseFormat: 'json',
@@ -331,8 +333,9 @@ export class CopilotService {
           result: reason?.trim() || null,
           resolvedAt: now,
         })
-        .where(eq(copilotActions.id, actionId))
+        .where(and(eq(copilotActions.id, actionId), eq(copilotActions.status, 'pending')))
         .returning();
+      if (updated.length === 0) throw new ConflictException('该操作已被其他请求处理，请刷新后重试');
 
       return {
         action: this.mapAction(updated[0]),
@@ -341,7 +344,22 @@ export class CopilotService {
       };
     }
 
-    const tool = getTool(actionRow.toolName);
+    // 原子抢占：只有一个并发请求能把 pending -> processing，真实写操作在抢占后执行。
+    const claimedRows = await this.db
+      .update(copilotActions)
+      .set({ status: 'processing' })
+      .where(and(
+        eq(copilotActions.id, actionId),
+        eq(copilotActions.userId, userId),
+        eq(copilotActions.status, 'pending'),
+      ))
+      .returning();
+    if (claimedRows.length === 0) {
+      throw new ConflictException('该操作已被其他请求处理，请刷新后重试');
+    }
+    const claimedAction = claimedRows[0];
+
+    const tool = getTool(claimedAction.toolName);
     if (!tool || tool.kind !== 'write') {
       const updated = await this.db
         .update(copilotActions)
@@ -361,7 +379,7 @@ export class CopilotService {
 
     let args: Record<string, unknown> = {};
     try {
-      const parsed = JSON.parse(actionRow.args) as unknown;
+      const parsed = JSON.parse(claimedAction.args) as unknown;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         args = parsed as Record<string, unknown>;
       }

@@ -1,36 +1,38 @@
 ---
-name: Bug 报告 / Bug report
-about: 提交一个缺陷，帮助我们改进
+name: Bug report
+about: Report a defect so we can fix it
 title: "[Bug] "
 labels: bug
 assignees: ''
-
 ---
 
-## 描述 / Description
+## Description
 
-<!-- 清楚描述你遇到的问题 -->
+<!-- A clear, concise description of the problem. -->
 
-## 复现步骤 / Steps to reproduce
+## Steps to reproduce
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
-## 期望行为 / Expected behavior
+## Expected behaviour
 
-<!-- 你期望发生什么 -->
+<!-- What you expected to happen. -->
 
-## 实际行为 / Actual behavior
+## Actual behaviour
 
-<!-- 实际发生了什么，可附截图/日志 -->
+<!-- What actually happened. Attach screenshots or logs if useful. -->
 
-## 环境 / Environment
+## Environment
 
-- 运行方式：Docker Compose / 本地开发
-- 浏览器与版本（如涉及前端）：
-- 是否配置了 LLM_API_KEY / 支付密钥：
+- Deployment: Docker Compose / local development
+- Node version (`.nvmrc`):
+- PostgreSQL version:
+- Browser and version (front-end issues):
+- AI key configured: yes / no
+- Payment provider configured: none / Stripe / PayPal
 
-## 补充信息 / Additional context
+## Additional context
 
-<!-- 其他有帮助的信息 -->
+<!-- Anything else that helps. Do not paste secrets, tokens or customer data. -->

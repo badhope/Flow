@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { AiGatewayService } from './ai-gateway.service';
+import type { SellerActor } from './seller-scope';
 import type { AITranslationRequest, AITranslationResponse } from '../../../shared/api.interface';
 
 const MAX_TEXT_LENGTH = 5000;
@@ -24,7 +25,8 @@ export const LANGUAGE_NAMES: Record<string, string> = {
 export class TranslationService {
   constructor(private readonly aiGateway: AiGatewayService) {}
 
-  async translate(dto: AITranslationRequest, userId?: string): Promise<AITranslationResponse> {
+  async translate(dto: AITranslationRequest, actorOrUserId?: SellerActor | string): Promise<AITranslationResponse> {
+    const actor: SellerActor = typeof actorOrUserId === 'string' ? { userId: actorOrUserId } : (actorOrUserId ?? {});
     const text = dto.text?.trim() ?? '';
     if (!text) {
       throw new BadRequestException('待翻译文本不能为空');
@@ -53,7 +55,7 @@ ${text}`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.3, maxTokens: 2000, agent: 'translation', userId },
+      { temperature: 0.3, maxTokens: 2000, agent: 'translation', userId: actor.userId, role: actor.role },
     );
 
     return { translatedText: content.trim() };

@@ -321,6 +321,8 @@ export interface InquirySession {
   id: string;
   sessionId: string;
   userId?: string;
+  /** Display name of the buyer, so the seller list never shows a UUID. */
+  userName?: string;
   status: 'active' | 'closed';
   lastMessage?: string;
   lastMessageAt?: string;
@@ -525,7 +527,7 @@ export interface AIUsageStatsQuery {
 
 export type CopilotToolKind = 'read' | 'write';
 
-export type CopilotActionStatus = 'pending' | 'executed' | 'rejected' | 'failed';
+export type CopilotActionStatus = 'pending' | 'processing' | 'executed' | 'rejected' | 'failed';
 
 export interface CopilotMessage {
   id: string;
@@ -929,6 +931,8 @@ export interface AuditLogQuery {
 export interface Refund {
   id: string;
   orderId: string;
+  /** Human-readable order number (e.g. ORD20261103...). Absent only if the order row is gone. */
+  orderNo?: string;
   userId: string;
   refundNo: string;
   status: 'requested' | 'approved' | 'rejected' | 'completed';
@@ -982,32 +986,42 @@ export interface ShippingRule {
   additionalWeightFee: string;
 }
 
+/**
+ * Mirrors the `shipping_templates` table. Rates are a flat first-unit fee plus
+ * a per-additional-unit fee; `specialZones` is a JSON string of
+ * `[{ countries: string[], extraFee: string }]`.
+ */
 export interface ShippingTemplate {
   id: string;
   sellerId: string;
   name: string;
-  rules: ShippingRule[];
-  defaultRule?: ShippingRule;
-  freeShippingThreshold?: string;
-  status: 'active' | 'inactive';
+  freeShippingThreshold: string;
+  baseFee: string;
+  extraFeePerUnit: string;
+  unitType: 'weight' | 'quantity';
+  specialZones?: string | null;
+  isDefault: boolean;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateShippingTemplateRequest {
   name: string;
-  rules: ShippingRule[];
-  defaultRule?: ShippingRule;
-  freeShippingThreshold?: number;
-  status?: 'active' | 'inactive';
+  baseFee?: string;
+  extraFeePerUnit?: string;
+  unitType?: 'weight' | 'quantity';
+  freeShippingThreshold?: string;
+  specialZones?: string;
+  isDefault?: boolean;
 }
 
 export interface UpdateShippingTemplateRequest {
   name?: string;
-  rules?: ShippingRule[];
-  defaultRule?: ShippingRule;
-  freeShippingThreshold?: number;
-  status?: 'active' | 'inactive';
+  baseFee?: string;
+  extraFeePerUnit?: string;
+  unitType?: 'weight' | 'quantity';
+  freeShippingThreshold?: string;
+  specialZones?: string;
+  isDefault?: boolean;
 }
 
 export interface ShippingCalculateRequest {

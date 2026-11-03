@@ -49,6 +49,7 @@ import type {
   UpdateCollectionRequest,
 } from '@shared/api.interface';
 import { toast } from 'sonner';
+import { SellerPageHeader } from '@/components/seller/SellerUI';
 
 const PAGE_SIZE = 10;
 
@@ -195,17 +196,17 @@ const CollectionsPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Layers className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-slate-900">集合管理</h2>
-        </div>
-        <Button size="sm" onClick={handleCreate}>
-          <Plus className="mr-1 h-4 w-4" />
-          创建集合
-        </Button>
-      </div>
+      <SellerPageHeader
+        eyebrow={'Collections'}
+        title={'运营集合'}
+        description={'手动或智能集合，自动生成买家首页运营楼层。'}
+        actions={
+          <Button size="sm" onClick={handleCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            创建集合
+          </Button>
+        }
+      />
 
       {/* Collections table */}
       <Card className="shadow-sm">
