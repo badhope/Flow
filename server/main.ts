@@ -55,14 +55,18 @@ async function bootstrap(): Promise<void> {
   // 以及机器可读的 OpenAPI 与页面元信息。放在 SPA 回退之前注册。
   const seo = app.get(SeoService);
   const http = app.getHttpAdapter().getInstance();
-  http.get('/sitemap.xml', async (_req: Request, res: Response) => {
-    res.type('application/xml').send(await seo.sitemap());
+  http.get('/sitemap.xml', async (req: Request, res: Response) => {
+    res.type('application/xml').send(await seo.sitemap(req));
   });
-  http.get('/robots.txt', (_req: Request, res: Response) => {
-    res.type('text/plain').send(seo.robots());
+  http.get('/robots.txt', (req: Request, res: Response) => {
+    res.type('text/plain').send(seo.robots(req));
   });
-  http.get('/llms.txt', (_req: Request, res: Response) => {
-    res.type('text/plain').send(seo.llmsTxt());
+  http.get('/llms.txt', (req: Request, res: Response) => {
+    res.type('text/plain').send(seo.llmsTxt(req));
+  });
+  // Agent Card（A2A 约定）：把可用的只读能力与鉴权方式机器可读地声明出来
+  http.get('/.well-known/agent-card.json', (req: Request, res: Response) => {
+    res.type('application/json').send(seo.agentCard(req));
   });
   http.get('/api/openapi.json', (_req: Request, res: Response) => {
     res.json(buildOpenApiSpec());

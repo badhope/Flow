@@ -286,6 +286,11 @@ export interface CreateOrderRequest {
   customerNote?: string;
   remark?: string; // @deprecated use customerNote
   couponCode?: string;
+  /**
+   * 下单幂等键（建议由前端在进入结算页时生成 UUID）。
+   * 同一键重复提交只产生一张订单：双击、超时重试、网关重放都安全。
+   */
+  idempotencyKey?: string;
   items: { productId: string; variantId?: string; quantity: number }[];
 }
 
@@ -505,6 +510,9 @@ export interface AIUsageAgentStat {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  /** 该 Agent 的累计成本（USD）。null = 模型未收录价目 */
+  costUsd: string | null;
   durationMs: number;
 }
 
@@ -512,6 +520,10 @@ export interface AIUsageStats {
   totalCalls: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  /** 命中提示缓存的输入 token */
+  totalCachedInputTokens: number;
+  /** 累计成本（USD）。null = 模型未收录价目，不是 0 */
+  totalCostUsd: string | null;
   totalDurationMs: number;
   successRate: number;
   byAgent: AIUsageAgentStat[];
@@ -599,6 +611,14 @@ export interface CopilotToolsView {
     name: string;
     description: string;
     kind: CopilotToolKind;
+    /** 风险等级由服务端唯一声明，前端据此渲染审批卡，不再自建映射表 */
+    risk: 'low' | 'medium' | 'high';
+    /** 是否不可逆（资金/对外动作），UI 需二次确认 */
+    irreversible: boolean;
+    labelZh: string;
+    labelEn: string;
+    /** JSON Schema，供 MCP / 开放 API 复用 */
+    inputSchema: Record<string, unknown>;
     params: Array<{ name: string; type: string; required: boolean; description: string }>;
   }>;
 }

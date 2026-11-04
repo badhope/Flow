@@ -12,6 +12,7 @@ import { AiGatewayService } from '../ai/ai-gateway.service';
 import { ShopperAnalyticsService } from './shopper-analytics.service';
 import { ShopperToolService } from './shopper-tool.service';
 import { SHOPPER_TOOLS, getShopperTool } from './shopper-tools';
+import { buildToolContracts } from '../copilot/copilot-tool-contract';
 import {
   buildToolCatalog,
   parseCopilotDecision,
@@ -98,12 +99,19 @@ export class ShopperService {
   }
 
   async getTools(): Promise<CopilotToolsView> {
+    // 与卖家侧共用 copilot-tool-contract 的投射，风险/标签/JSON Schema 单一来源
+    const contracts = buildToolContracts(SHOPPER_TOOLS);
     return {
-      tools: SHOPPER_TOOLS.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        kind: tool.kind,
-        params: tool.params.map((param) => ({
+      tools: contracts.map((c) => ({
+        name: c.name,
+        description: c.description,
+        kind: c.kind,
+        risk: c.risk,
+        irreversible: c.irreversible,
+        labelZh: c.labelZh,
+        labelEn: c.labelEn,
+        inputSchema: c.inputSchema,
+        params: (SHOPPER_TOOLS.find((t) => t.name === c.name)?.params ?? []).map((param) => ({
           name: param.name,
           type: param.type,
           required: param.required === true,

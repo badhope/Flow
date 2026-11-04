@@ -7,8 +7,10 @@ import { relations, sql } from 'drizzle-orm';
 // ==================== Enums ====================
 
 export const userRoleEnum = pgEnum('user_role', ['buyer', 'seller', 'admin']);
+// 注意：不含 'processing'。历史上声明过但无任何迁移指向它，已由迁移 0010 移除，
+// 避免对外暴露一个永远达不到的状态。
 export const orderStatusEnum = pgEnum('order_status', [
-  'pending_payment', 'paid', 'processing', 'shipped',
+  'pending_payment', 'paid', 'shipped',
   'delivered', 'cancelled', 'refunded', 'partially_refunded',
 ]);
 export const paymentMethodEnum = pgEnum('payment_method', ['stripe', 'paypal', 'demo']);
@@ -279,6 +281,8 @@ export const orders = pgTable('orders', {
   // 优惠券
   couponId: uuid('coupon_id'),
   couponCode: varchar('coupon_code', { length: 50 }),
+  // 下单幂等键：同一买家/会话重复提交只产生一张订单（部分唯一索引见迁移 0009）
+  idempotencyKey: varchar('idempotency_key', { length: 120 }),
   // 支付
   paymentMethod: paymentMethodEnum('payment_method'),
   paymentId: varchar('payment_id', { length: 255 }),
@@ -346,6 +350,12 @@ export const refunds = pgTable('refunds', {
   sellerReply: text('seller_reply'),
   // 处理方
   refundMethod: varchar('refund_method', { length: 20 }).notNull().default('original'), // original=原路返回
+  // 渠道退款单号：渠道返回后立刻落库，供"已退款但业务写库失败"时对账，绝不重复打款
+  providerRefundId: varchar('provider_refund_id', { length: 255 }),
+  // none=未发起 / inflight=已提交渠道在途 / succeeded=渠道成功 / failed=渠道明确失败
+  providerState: varchar('provider_state', { length: 16 }).notNull().default('none'),
+  // 发起渠道退款时使用的幂等键，重试沿用同一个值
+  idempotencyKey: varchar('idempotency_key', { length: 120 }),
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -503,9 +513,15 @@ export const aiUsageLog = pgTable('ai_usage_log', {
   model: varchar('model', { length: 64 }),
   inputTokens: integer('input_tokens').notNull().default(0),
   outputTokens: integer('output_tokens').notNull().default(0),
+  // 命中提示缓存的输入 token：成本核算的主要杠杆，单列出来才能优化
+  cachedInputTokens: integer('cached_input_tokens').notNull().default(0),
   durationMs: integer('duration_ms').notNull().default(0),
   success: boolean('success').notNull().default(true),
   errorMessage: text('error_message'),
+  // 按写入时的价目表算好的美元成本；null 表示模型未收录价目，不臆造
+  costUsd: decimal('cost_usd', { precision: 12, scale: 6 }),
+  // 关联 trace：一次 Agent 运行内多次调用共享同一个值
+  traceId: varchar('trace_id', { length: 64 }),
   userId: uuid('user_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -613,6 +629,14 @@ export const copilotActions = pgTable('copilot_actions', {
   batchId: varchar('batch_id', { length: 36 }),
   result: text('result'),
   errorMessage: text('error_message'),
+  // 待审批动作的过期时间：过期即不可执行，防止旧审批被翻出来执行
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  // processing 状态的租约：超时未回写可被回收为 failed，避免永久悬挂
+  leaseUntil: timestamp('lease_until', { withTimezone: true }),
+  // 审批时固化的工具定义指纹（风险等级 + 参数 schema hash）；工具定义变更后旧审批失效
+  policySnapshot: text('policy_snapshot'),
+  // 同会话同工具同参数的幂等锚点（部分唯一索引见迁移 0009）
+  idempotencyKey: varchar('idempotency_key', { length: 120 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 }, (t) => ({

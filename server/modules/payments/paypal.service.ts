@@ -142,6 +142,8 @@ export class PayPalService {
     captureId: string,
     amount?: number,
     currency = 'USD',
+    /** PayPal-Request-Id：同键重复调用返回同一次退款，防超时重试造成重复打款。 */
+    idempotencyKey?: string,
   ): Promise<{ refundId: string; status: string }> {
     if (!this.isConfigured()) {
       throw new Error('PayPal not configured');
@@ -164,6 +166,7 @@ export class PayPalService {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(idempotencyKey ? { 'PayPal-Request-Id': idempotencyKey } : {}),
         },
         body,
       },

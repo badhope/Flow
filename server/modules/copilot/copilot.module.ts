@@ -15,6 +15,7 @@ import { CopilotInsightsService } from './copilot-insights.service';
 import { CopilotWatchService } from './copilot-watch.service';
 import { CopilotNotifyService } from './copilot-notify.service';
 import { NotifyTransport } from './copilot-notify-transport';
+import { CopilotActionReaperService } from './copilot-action-reaper.service';
 
 @Module({
   imports: [
@@ -29,7 +30,16 @@ import { NotifyTransport } from './copilot-notify-transport';
     ShopperModule,
   ],
   controllers: [CopilotController],
-  providers: [CopilotService, CopilotToolService, CopilotInsightsService, CopilotWatchService, CopilotNotifyService, NotifyTransport],
-  exports: [CopilotService],
+  providers: [
+    CopilotService,
+    CopilotToolService,
+    CopilotInsightsService,
+    CopilotWatchService,
+    CopilotNotifyService,
+    NotifyTransport,
+    CopilotActionReaperService,
+  ],
+  // CopilotToolService 需要被 McpModule 复用（只读工具执行），必须导出
+  exports: [CopilotService, CopilotToolService],
 })
 export class CopilotModule {}

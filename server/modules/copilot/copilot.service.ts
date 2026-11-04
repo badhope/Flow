@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, lt, sql } from 'drizzle-orm';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import {
   copilotActions,
@@ -18,6 +18,7 @@ import {
 import { AiGatewayService } from '../ai/ai-gateway.service';
 import { CopilotToolService } from './copilot-tool.service';
 import { COPILOT_TOOLS, getTool } from './copilot-tools';
+import { buildToolContracts, policyFingerprint, actionIdempotencyKey } from './copilot-tool-contract';
 import {
   buildToolCatalog,
   parseCopilotDecision,
@@ -36,6 +37,12 @@ import type {
 
 /** 单轮最多循环次数：防止模型陷入工具调用死循环 */
 const MAX_STEPS = 6;
+
+/** 待审批动作有效期：24h。过期后不可执行，防止陈旧审批被误触发。 */
+const ACTION_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** processing 租约：超过该时长未回写即视为进程中断，可被回收。 */
+const ACTION_LEASE_MS = 2 * 60 * 1000;
 /** 单轮最多生成 3 个待审批动作，避免一次刷出大量确认卡片 */
 const MAX_PENDING_ACTIONS_PER_TURN = 3;
 
@@ -237,19 +244,51 @@ export class CopilotService {
 
       const summary = tool.summarize?.(validation.args) ?? `${tool.name} ${JSON.stringify(validation.args)}`;
       if (!currentBatchId) currentBatchId = randomUUID();
-      const actionRow = await this.db
-        .insert(copilotActions)
-        .values({
-          conversationId,
-          userId,
-          toolName: tool.name,
-          kind: 'write',
-          summary,
-          args: JSON.stringify(validation.args),
-          status: 'pending',
-          batchId: currentBatchId,
-        })
-        .returning();
+      // 同会话 + 同工具 + 同参数只允许一条在途动作：模型重复提议时复用已有 pending，
+      // 不制造第二张审批卡（部分唯一索引兜底并发）。
+      const idempotencyKey = actionIdempotencyKey(conversationId, tool.name, validation.args);
+      // 先查同键在途动作：命中则复用，不再插新卡（也避免把已存在的卡片重复展示给卖家）
+      const existing = await this.db
+        .select()
+        .from(copilotActions)
+        .where(and(
+          eq(copilotActions.idempotencyKey, idempotencyKey),
+          eq(copilotActions.status, 'pending'),
+        ))
+        .limit(1);
+
+      let actionRow = existing;
+      if (existing.length === 0) {
+        const inserted = await this.db
+          .insert(copilotActions)
+          .values({
+            conversationId,
+            userId,
+            toolName: tool.name,
+            kind: 'write',
+            summary,
+            args: JSON.stringify(validation.args),
+            status: 'pending',
+            batchId: currentBatchId,
+            idempotencyKey,
+            // 审批有效期：过期动作不可执行，避免旧卡片被翻出来打款
+            expiresAt: new Date(Date.now() + ACTION_TTL_MS),
+            // 固化审批时的工具语义指纹，工具定义变更后旧审批自动失效
+            policySnapshot: policyFingerprint(tool),
+          })
+          .onConflictDoNothing({ target: copilotActions.idempotencyKey, where: sql`${copilotActions.idempotencyKey} IS NOT NULL` })
+          .returning();
+        actionRow = inserted.length > 0
+          ? inserted
+          : await this.db
+            .select()
+            .from(copilotActions)
+            .where(and(
+              eq(copilotActions.idempotencyKey, idempotencyKey),
+              eq(copilotActions.status, 'pending'),
+            ))
+            .limit(1);
+      }
 
       const action = this.mapAction(actionRow[0]);
       newActions.push(action);
@@ -324,6 +363,43 @@ export class CopilotService {
       throw new BadRequestException(`该操作已处理（${actionRow.status}），不能重复审批`);
     }
 
+    // 过期审批一律不可执行：宁可让卖家重新发起，也不让陈旧卡片触发真实打款
+    if (actionRow.expiresAt && actionRow.expiresAt.getTime() <= Date.now()) {
+      const expired = await this.db
+        .update(copilotActions)
+        .set({
+          status: 'failed',
+          errorMessage: '该操作已超过有效期（24 小时），请重新发起',
+          resolvedAt: new Date(),
+        })
+        .where(and(eq(copilotActions.id, actionId), eq(copilotActions.status, 'pending')))
+        .returning();
+      return {
+        action: this.mapAction(expired[0] ?? actionRow),
+        ok: false,
+        message: '该操作已超过有效期（24 小时），请重新发起。',
+      };
+    }
+
+    // 工具语义变更后旧审批失效：审批卡的描述与实际执行语义必须一致
+    const liveTool = getTool(actionRow.toolName);
+    if (!liveTool || (actionRow.policySnapshot && actionRow.policySnapshot !== policyFingerprint(liveTool))) {
+      const stale = await this.db
+        .update(copilotActions)
+        .set({
+          status: 'failed',
+          errorMessage: '工具定义已变更，该审批已失效，请重新发起',
+          resolvedAt: new Date(),
+        })
+        .where(and(eq(copilotActions.id, actionId), eq(copilotActions.status, 'pending')))
+        .returning();
+      return {
+        action: this.mapAction(stale[0] ?? actionRow),
+        ok: false,
+        message: '工具定义已变更，该审批已失效，请重新发起。',
+      };
+    }
+
     if (!approve) {
       const now = new Date();
       const updated = await this.db
@@ -347,7 +423,7 @@ export class CopilotService {
     // 原子抢占：只有一个并发请求能把 pending -> processing，真实写操作在抢占后执行。
     const claimedRows = await this.db
       .update(copilotActions)
-      .set({ status: 'processing' })
+      .set({ status: 'processing', leaseUntil: new Date(Date.now() + ACTION_LEASE_MS) })
       .where(and(
         eq(copilotActions.id, actionId),
         eq(copilotActions.userId, userId),
@@ -415,6 +491,7 @@ export class CopilotService {
           result: result.content,
           errorMessage: result.ok ? null : result.content,
           resolvedAt: now,
+          leaseUntil: null,
         })
         .where(eq(copilotActions.id, actionId))
         .returning();
@@ -427,6 +504,11 @@ export class CopilotService {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`动作 ${actionId} 执行失败：${message}`);
+      // 释放租约，避免这条动作永远停在 processing
+      await this.db
+        .update(copilotActions)
+        .set({ leaseUntil: null })
+        .where(eq(copilotActions.id, actionId));
       const updated = await this.db
         .update(copilotActions)
         .set({ status: 'failed', errorMessage: message, resolvedAt: new Date() })
@@ -567,13 +649,67 @@ export class CopilotService {
 
   // ==================== 工具目录 ====================
 
+  /**
+   * 回收卡在 processing 的动作。
+   *
+   * 抢占 pending → processing 之后，进程可能在"已调渠道、未回写"之间崩溃。没有回收时
+   * 这条动作会永久停在 processing：卖家看不到、也不能重试。这里把租约过期的动作标为
+   * failed 并保留证据（可能已产生真实副作用），交由人工核对，绝不自动重试。
+   *
+   * 同时把过期的 pending 动作标为失败——陈旧审批不该还能点。
+   */
+  async reclaimStaleActions(): Promise<{ reclaimed: number; expired: number }> {
+    const now = new Date();
+    const reclaimed = await this.db
+      .update(copilotActions)
+      .set({
+        status: 'failed',
+        errorMessage: '执行中断（进程退出或超时），可能已产生副作用，请人工核对后重新发起',
+        resolvedAt: now,
+        leaseUntil: null,
+      })
+      .where(and(
+        eq(copilotActions.status, 'processing'),
+        lt(copilotActions.leaseUntil, now),
+      ))
+      .returning({ id: copilotActions.id });
+
+    const expired = await this.db
+      .update(copilotActions)
+      .set({
+        status: 'failed',
+        errorMessage: '待审批超时（24 小时），已自动失效',
+        resolvedAt: now,
+      })
+      .where(and(
+        eq(copilotActions.status, 'pending'),
+        lt(copilotActions.expiresAt, now),
+      ))
+      .returning({ id: copilotActions.id });
+
+    if (reclaimed.length > 0 || expired.length > 0) {
+      this.logger.warn(
+        `copilot 审批回收：中断 ${reclaimed.length} 条，过期 ${expired.length} 条`,
+      );
+    }
+    return { reclaimed: reclaimed.length, expired: expired.length };
+  }
+
   getTools(): CopilotToolsView {
+    // 契约由 copilot-tool-contract 单一投射：风险等级/不可逆标记/JSON Schema 与
+    // 审批卡、MCP 端点共用同一份声明，不再由前端手工维护 TOOL_META。
+    const contracts = buildToolContracts(COPILOT_TOOLS);
     return {
-      tools: COPILOT_TOOLS.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        kind: tool.kind,
-        params: tool.params.map((p) => ({
+      tools: contracts.map((c) => ({
+        name: c.name,
+        description: c.description,
+        kind: c.kind,
+        risk: c.risk,
+        irreversible: c.irreversible,
+        labelZh: c.labelZh,
+        labelEn: c.labelEn,
+        inputSchema: c.inputSchema,
+        params: (COPILOT_TOOLS.find((t) => t.name === c.name)?.params ?? []).map((p) => ({
           name: p.name,
           type: p.type,
           required: p.required === true,

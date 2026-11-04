@@ -545,6 +545,11 @@ export class PaymentsService {
   async processRefund(
     paymentId: string,
     amount?: number,
+    /**
+     * 渠道幂等键。同一笔退款重试时必须传同一个值，Stripe 才会返回首次结果而不是再退一次。
+     * 缺省时退化为“无幂等保护”，仅用于内部脚本。
+     */
+    idempotencyKey?: string,
   ): Promise<{ providerRefundId: string | null; paymentStatus: string }> {
     const paymentRows = await this.db.select().from(payments).where(eq(payments.id, paymentId));
     if (paymentRows.length === 0) {
@@ -567,7 +572,7 @@ export class PaymentsService {
 
     if (payment.provider === 'stripe' && payment.transactionId && this.stripeService.isConfigured()) {
       try {
-        const result = await this.stripeService.refund(payment.transactionId, refundAmount);
+        const result = await this.stripeService.refund(payment.transactionId, refundAmount, idempotencyKey);
         providerRefundId = result.refundId;
       } catch (err) {
         this.logger.error('Stripe refund failed', (err as Error).message);
@@ -579,6 +584,7 @@ export class PaymentsService {
           payment.transactionId,
           refundAmount,
           payment.currency,
+          idempotencyKey,
         );
         providerRefundId = result.refundId;
       } catch (err) {

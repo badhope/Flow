@@ -4,6 +4,38 @@
 >
 > 本路线图按「可信 → 可用 → 可增长」排序，不追求功能数量。
 
+## 已完成（v1.24.0）
+
+### 可靠性与 Agent 互操作
+
+| 项 | 状态 |
+|---|---|
+| 退款渠道幂等键（Stripe `Idempotency-Key` / PayPal `PayPal-Request-Id`） | ✅ |
+| 退款渠道单号先落库再开业务事务（`provider_refund_id` + `provider_state`） | ✅ |
+| 下单幂等（`orders.idempotency_key` + 部分唯一索引，前端结算页稳定复用） | ✅ |
+| 审批动作生命周期：`expires_at` / `lease_until` / 60s 看门狗回收 / `policy_snapshot` | ✅ |
+| 订单状态机与 DB enum 对齐；移除不可达的 `processing` | ✅ |
+| 工具契约单一事实源（模型目录 / 审批 UI / MCP schema / OpenAPI 四处同源） | ✅ |
+| LLM 网关指数退避重试（429/5xx/网络，尊重 Retry-After） | ✅ |
+| 成本核算（输入/输出/缓存分价 + 未收录模型诚实返回 null） | ✅ |
+| 任务级模型路由（写文案/客服/趋势可分别指定模型） | ✅ |
+| MCP 只读服务端（Streamable HTTP，5 个读工具，写工具明确拒绝） | ✅ |
+| Agent Card（`/.well-known/agent-card.json`） | ✅ |
+| 站点绝对 URL 按请求推导（修复未配置 APP_URL 时的 localhost 泄漏） | ✅ |
+
+### 尚未完成（诚实标注）
+
+| 项 | 原因 |
+|---|---|
+| SSE 流式输出 | 副驾仍为请求-响应；首字延迟等于整段生成时间 |
+| Eval 门禁（golden set + CI 断言） | 只有单测与 E2E，prompt 变更缺量化回归 |
+| OpenTelemetry GenAI trace 导出 | 已有 `trace_id` 落库，未接 OTel exporter |
+| 成本预算/配额上限 | 已计量，未设租户级日/月上限 |
+| 多市场定价（按市场/币种独立价格） | 单一 USD 定价 |
+| PII 进模型前脱敏 | 客服上下文会带收货人信息 |
+
+---
+
 ## 已完成（v1.22.0）
 
 ### 安全与正确性（前置门槛）

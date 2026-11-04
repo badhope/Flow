@@ -342,12 +342,41 @@ export class RefundsService {
         ? resolveProviderRefundAmount(paidAmount.toString(), refundAmount.toString())
         : Number(refundAmount.toFixed(2));
 
+      // 幂等键在发起前就固定下来并落库：重试沿用同一条键，渠道侧不会重复退款。
+      const idempotencyKey = `refund_${refund.id}`;
+      await this.db
+        .update(refunds)
+        .set({ providerState: 'inflight', idempotencyKey, updatedAt: new Date() })
+        .where(eq(refunds.id, refundId));
+
       try {
-        const result = await this.paymentsService.processRefund(paymentRows[0].id, providerAmount);
+        const result = await this.paymentsService.processRefund(
+          paymentRows[0].id,
+          providerAmount,
+          idempotencyKey,
+        );
         providerRefundId = result.providerRefundId;
+
+        // 渠道一成功就把单号落库（不等业务事务）。
+        // 若随后的业务事务失败，这条记录仍能证明「钱已退」，绝不会被当作未退款再打一次；
+        // 对账时也能凭 provider_refund_id 在渠道侧核实。
+        await this.db
+          .update(refunds)
+          .set({
+            providerState: 'succeeded',
+            providerRefundId: result.providerRefundId ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(refunds.id, refundId));
       } catch (err) {
         const msg = (err as Error).message;
         this.logger.error(`Payment refund failed for refund ${refundId}: ${msg}`);
+        // 明确失败才回写 failed；超时/网络中断属于“结果未知”，保持 inflight 供对账
+        const isDefinite = /^Stripe 退款失败|^PayPal 退款失败|^退款金额无效|^只能对已支付/.test(msg);
+        await this.db
+          .update(refunds)
+          .set({ providerState: isDefinite ? 'failed' : 'inflight', updatedAt: new Date() })
+          .where(eq(refunds.id, refundId));
         throw new BadRequestException(`支付退款失败: ${msg}`);
       }
     }

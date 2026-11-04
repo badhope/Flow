@@ -141,6 +141,11 @@ export class StripeService {
   async refund(
     paymentIntentId: string,
     amount?: number,
+    /**
+     * Stripe 幂等键：24 小时内同键重复调用返回首次结果，不会产生第二笔退款。
+     * 这是防「网络超时后重试导致重复打款」的官方机制。
+     */
+    idempotencyKey?: string,
   ): Promise<{ refundId: string }> {
     if (!this.secretKey) {
       throw new Error('Stripe not configured');
@@ -157,6 +162,7 @@ export class StripeService {
         'Content-Type': 'application/x-www-form-urlencoded',
         Authorization: `Bearer ${this.secretKey}`,
         'Stripe-Version': '2024-06-20',
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
       },
       body: params,
     });

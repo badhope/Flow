@@ -45,9 +45,15 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: 'Flow — AI-Native Cross-Border Commerce API',
-      version: '1.22.0',
-      description:
-        'Buyer storefront + seller AI workbench. All state-changing browser requests require the X-Requested-With: XMLHttpRequest header (CSRF). Authentication uses an HttpOnly JWT cookie.',
+      // 与 package.json 的 version 同步；漂移会让集成方按错误版本对接
+      version: '1.24.0',
+      description: [
+        'Buyer storefront + seller AI workbench.',
+        'All state-changing browser requests require the X-Requested-With: XMLHttpRequest header (CSRF).',
+        'Authentication uses an HttpOnly JWT cookie.',
+        'Agent integration is available over MCP at POST /api/mcp (read-only tools).',
+        'Order creation accepts an optional idempotencyKey for safe retries.',
+      ].join(' '),
       license: { name: 'MIT' },
     },
     servers: [{ url: '/', description: 'Same-origin deployment' }],
@@ -56,6 +62,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
       { name: 'commerce', description: 'Cart, orders, payments, refunds' },
       { name: 'seller', description: 'Seller workbench APIs (JWT + seller role)' },
       { name: 'system', description: 'Health, SEO, discovery' },
+      { name: 'agents', description: 'MCP endpoint for external AI agents (read-only)' },
     ],
     components: {
       schemas: {
@@ -67,6 +74,39 @@ export function buildOpenApiSpec(): Record<string, unknown> {
       },
     },
     paths: {
+      '/api/mcp': {
+        post: {
+          tags: ['agents'],
+          summary: 'MCP Streamable HTTP endpoint (JSON-RPC 2.0)',
+          description:
+            'Model Context Protocol server. Supports initialize, tools/list and tools/call over Streamable HTTP. '
+            + 'Only read tools are exposed; write operations require human approval in the workbench.',
+          requestBody: {
+            required: true,
+            content: json({
+              type: 'object',
+              required: ['jsonrpc', 'method'],
+              properties: {
+                jsonrpc: { type: 'string', enum: ['2.0'] },
+                id: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'null' }] },
+                method: { type: 'string', enum: ['initialize', 'tools/list', 'tools/call', 'ping'] },
+                params: { type: 'object' },
+              },
+            }),
+          },
+          responses: {
+            200: { description: 'JSON-RPC response (result or error)' },
+            202: { description: 'Notification accepted (no body)' },
+          },
+        },
+      },
+      '/api/mcp/health': {
+        get: {
+          tags: ['agents'],
+          summary: 'MCP endpoint liveness (public, no user data)',
+          responses: { 200: { description: 'Endpoint alive', content: json({ type: 'object' }) } },
+        },
+      },
       '/api/health': {
         get: {
           tags: ['system'],
