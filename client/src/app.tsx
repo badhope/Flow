@@ -1,8 +1,9 @@
 import React, { useEffect, lazy, Suspense } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToolContractProvider } from './contexts/ToolContractContext';
 import BuyerLayout from './components/BuyerLayout';
 import SellerLayout from './components/SellerLayout';
 import SellerRouteGuard from './components/SellerRouteGuard';
@@ -42,6 +43,9 @@ const RouteFallback: React.FC = () => (
 );
 
 const RoutesComponent = () => {
+  // 工具契约只在卖家工作台需要；在买家页拉取会被 403 拒绝并污染控制台
+  const { pathname } = useLocation();
+  const needsToolContracts = pathname.startsWith('/seller');
   // 会话内每日一次访问上报（卖家看板访客数）
   useEffect(() => {
     reportVisitOnce();
@@ -50,6 +54,7 @@ const RoutesComponent = () => {
   return (
     <LanguageProvider>
       <AuthProvider>
+        <ToolContractProvider enabled={needsToolContracts}>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -95,6 +100,7 @@ const RoutesComponent = () => {
           </Routes>
         </Suspense>
         <Toaster position="top-right" />
+        </ToolContractProvider>
       </AuthProvider>
     </LanguageProvider>
   );

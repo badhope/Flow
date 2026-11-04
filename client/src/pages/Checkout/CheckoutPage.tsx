@@ -67,6 +67,16 @@ const CheckoutPage: React.FC = () => {
   const { user } = useAuth();
   const tRef = useRef(t);
   tRef.current = t;
+  /**
+   * 下单幂等键：整段结算页生命周期内固定。
+   * 双击提交、网络超时后重试、浏览器重放都携带同一个键，服务端只会建一张订单。
+   * 用 ref 而不是 state：重渲染不应改变它，改变了就失去幂等意义。
+   */
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `co_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+  );
   const navigate = useNavigate();
 
 
@@ -247,6 +257,7 @@ const CheckoutPage: React.FC = () => {
         paymentMethod: paymentProvider,
         remark: values.remark || undefined,
         couponCode: appliedCouponCode || undefined,
+        idempotencyKey: idempotencyKeyRef.current,
         items: cart.items.map((item) => ({
           productId: item.productId,
           variantId: item.variantId,

@@ -652,6 +652,27 @@ export class OrdersService {
       }
     });
 
+    // ── 幂等短路：同一幂等键已经建过单，直接返回原单 ──
+    // 放在库存校验之前：重复提交不应消耗任何库存检查配额，也不该因为
+    // 「库存刚好被别人买走」而让用户看到失败——订单其实早已成功。
+    const idempotencyKey = dto.idempotencyKey?.trim() || null;
+    if (idempotencyKey) {
+      if (idempotencyKey.length > 120) {
+        throw new BadRequestException('幂等键过长');
+      }
+      const existingOrder = await this.db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.idempotencyKey, idempotencyKey))
+        .limit(1);
+      if (existingOrder.length > 0) {
+        // 必须带上本次请求的 userId/sessionId 做归属校验：
+        // 幂等键是调用方自己生成的，但"能读到哪张单"仍要按身份判定，
+        // 否则任何人猜到键就能拿到别人订单（信息泄露）。
+        return this.getOrderDetail(existingOrder[0].id, userId, sessionId);
+      }
+    }
+
     const orderNo = await this.generateUniqueOrderNo();
 
     let subtotal = new Decimal(0);
@@ -752,6 +773,7 @@ export class OrdersService {
         .insert(orders)
         .values({
           orderNo,
+          idempotencyKey,
           userId: userId ?? null,
           sellerId: orderSellerId,
           subtotal: pricing.subtotal,

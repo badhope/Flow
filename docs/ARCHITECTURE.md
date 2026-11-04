@@ -173,8 +173,9 @@ OpenAI 兼容端点（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱 ...）
 |---|---|
 | `GET /sitemap.xml` | 上架商品 + 启用集合 + 已发布 CMS 页面，含 lastmod |
 | `GET /robots.txt` | 允许公开页、屏蔽卖家/结算/订单/API，声明 sitemap |
-| `GET /llms.txt` | 面向 AI 代理的站点说明与公开 API 清单 |
-| `GET /api/openapi.json` | OpenAPI 3.1 描述（商品/购物车/订单/支付/健康检查） |
+| `GET /llms.txt` | 面向 AI 代理的站点说明、公开 API 清单与 MCP 接入方式 |
+| `GET /.well-known/agent-card.json` | Agent Card（A2A 约定）：机器可读的技能、鉴权与能力边界 |
+| `GET /api/openapi.json` | OpenAPI 3.1 描述（商品/购物车/订单/支付/健康检查/MCP） |
 | `GET /api/seo/meta?path=` | 单页元信息（title/description/canonical/JSON-LD），客户端路由切换时复用 |
 
 实现位置：`SeoService`（`server/modules/seo/seo.service.ts`）负责数据与渲染；路由在 `server/main.ts` 直接注册，
@@ -182,6 +183,37 @@ OpenAI 兼容端点（DeepSeek / 火山方舟 / OpenAI / 通义 / 智谱 ...）
 `buildOpenApiSpec()`（`server/modules/seo/openapi.ts`）为手写 OpenAPI 3.1，零新增依赖。
 
 注入内容：`title`、`description`、`canonical`、`robots`、OpenGraph、Twitter Card、组织/商品 JSON-LD；卖家与交易页面自动 `noindex`。
+
+**绝对 URL 解析顺序**：`APP_URL` → 请求的 `Host` / `X-Forwarded-Proto` → `localhost:3000` 兜底。
+早先只读 `APP_URL`，未配置时所有对外地址（sitemap / llms.txt / agent card）都写成 `localhost:3000`，
+在预览部署与自托管环境是静默错误。
+
+---
+
+## 七之二、Agent 互操作层（MCP）
+
+外部 Agent 通过 **MCP（Model Context Protocol）** 接入，端点 `POST /api/mcp`，传输为 **Streamable HTTP**，
+报文为 JSON-RPC 2.0。支持协议版本 `2025-11-25` / `2025-06-18` / `2025-03-26`（客户端请求哪个就回显哪个）。
+
+| 方法 | 行为 |
+|---|---|
+| `initialize` | 返回 `protocolVersion` / `capabilities.tools` / `serverInfo`；不声明未实现的 resources/prompts |
+| `tools/list` | 返回 5 个只读工具的 `inputSchema`（JSON Schema）与 `annotations`（`readOnlyHint` 等） |
+| `tools/call` | 执行只读工具；**业务错误走 `result.isError`**，让客户端模型能读到原因并自我修正 |
+| `ping` | 心跳 |
+| 其他 | `-32601`（方法不存在）/ `-32600`（报文非法）/ `-32602`（工具不存在或不可调用） |
+
+**能力边界是刻意的**：写工具（批准退款、改价、回复买家）**不通过 MCP 暴露**，调用时返回 `-32602` 并说明
+"请在 Flow 工作台人工审批"。原因：这些动作会移动真实资金或对外发声，必须经过审批卡。
+
+**工具定义单一来源**：`copilot-tool-contract.ts` 的一份声明同时生成
+
+1. 模型看到的文本工具目录
+2. 前端的风险元数据（替代原先 `ApprovalCard.tsx` 里手工维护的 `TOOL_META`）
+3. MCP 的 `inputSchema` 与 `annotations`
+4. OpenAPI 的工具 schema
+
+`policyFingerprint()` 为每个写动作固化审批时的语义指纹；工具定义变更后，旧 `pending` 审批自动失效。
 
 ---
 

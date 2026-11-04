@@ -45,8 +45,8 @@ function createFakeDb(seed: {
       },
     }),
     insert: (table: unknown) => ({
-      values: (values: Record<string, unknown>) => ({
-        returning: async () => {
+      values: (values: Record<string, unknown>) => {
+        const doInsert = async (): Promise<Row[]> => {
           const row: Row = {
             id: nextId(),
             createdAt: new Date(),
@@ -56,8 +56,14 @@ function createFakeDb(seed: {
           };
           (tables.get(table) ?? []).push(row);
           return [row];
-        },
-      }),
+        };
+        return {
+          returning: doInsert,
+          // 生产代码用 onConflictDoNothing 兜住幂等键并发；mock 需同形，
+          // 否则测试只验证了"能插"，验证不到"冲突时怎么办"。
+          onConflictDoNothing: () => ({ returning: doInsert }),
+        };
+      },
     }),
     update: (table: unknown) => ({
       set: (patch: Record<string, unknown>) => ({

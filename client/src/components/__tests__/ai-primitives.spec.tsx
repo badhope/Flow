@@ -1,12 +1,57 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import ApprovalCard from '@/components/ApprovalCard';
 import AgentTrace, { type TraceStep } from '@/components/AgentTrace';
 import { FlowStatus, FlowStat, FlowEmpty } from '@/components/seller/SellerUI';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { ToolContractProvider } from '@/contexts/ToolContractContext';
 
-const wrap = (ui: React.ReactElement) => render(<LanguageProvider>{ui}</LanguageProvider>);
+/**
+ * 把工具契约接口 mock 成同步可用的数据：审批卡的风险标识依赖它，
+ * 真实网络请求在 jsdom 里不会 resolve，测试会永远停在回退态。
+ * 这里用的就是服务端契约的真实形状（buildToolContracts 的输出）。
+ */
+vi.mock('@/api/copilot', () => ({
+  getCopilotTools: vi.fn(async () => ({
+    tools: [
+      {
+        name: 'approve_refund',
+        description: '批准退款',
+        kind: 'write',
+        risk: 'high',
+        irreversible: true,
+        labelZh: '批准退款（真实打款）',
+        labelEn: 'Approve refund (real payout)',
+        inputSchema: { type: 'object', properties: {} },
+        params: [],
+      },
+      {
+        name: 'update_order_status',
+        description: '改状态',
+        kind: 'write',
+        risk: 'medium',
+        irreversible: false,
+        labelZh: '修改订单状态',
+        labelEn: 'Change order status',
+        inputSchema: { type: 'object', properties: {} },
+        params: [],
+      },
+    ],
+  })),
+}));
+
+/**
+ * 审批卡的风险等级来自服务端工具契约（ToolContractProvider），
+ * 不再是前端硬编码表。测试里必须挂上 Provider，否则卡片会走保守回退（medium），
+ * 无法验证"高风险工具确实显示高风险"。
+ */
+const wrap = (ui: React.ReactElement) =>
+  render(
+    <LanguageProvider>
+      <ToolContractProvider>{ui}</ToolContractProvider>
+    </LanguageProvider>,
+  );
 
 const pendingAction = {
   id: 'a1',
@@ -26,9 +71,10 @@ describe('ApprovalCard R1: 写操作必须人工批准', () => {
     expect(screen.getByRole('button', { name: /拒绝|Reject/ })).toBeTruthy();
   });
 
-  it('R1: 高风险工具的批准按钮带风险标识', () => {
+  it('R1: 高风险工具的批准按钮带风险标识', async () => {
     wrap(<ApprovalCard action={pendingAction} onApprove={() => {}} onReject={() => {}} />);
-    expect(screen.getByText(/高风险|HIGH/)).toBeTruthy();
+    // 契约是异步加载的：先等 Provider 的微任务 flush，再看风险标识
+    expect(await screen.findByText(/高风险|HIGH/)).toBeTruthy();
   });
 
   it('R1: 已执行动作不再提供批准按钮（防重复审批）', () => {

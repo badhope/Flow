@@ -17,14 +17,39 @@ const SITE_NAME = 'Flow';
 const DEFAULT_TITLE = 'Flow — 让跨境生意更简单 · Cross-Border Commerce, Simplified';
 const DEFAULT_DESCRIPTION =
   'Flow 是 AI 原生的跨境出口电商平台：买家商城 + 卖家 AI 工作台，内置 5 个真实 AI Agent 与人工审批式运营副驾，覆盖上架、获客、成交、客服与复盘全链路。';
-const SITE_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+/**
+ * 站点绝对 URL 的解析顺序：
+ *   1. APP_URL（生产必配，最权威）
+ *   2. 请求的 X-Forwarded-Proto / Host（多环境、预览部署、反向代理都能自洽）
+ *   3. localhost:3000（仅本地兜底）
+ *
+ * 之前只用 process.env.APP_URL 兜底 localhost，导致任何未配置 APP_URL 的
+ * 环境（预览、自托管、测试端口）在 sitemap / llms.txt / agent-card 里
+ * 全部输出 localhost:3000 —— 对外部爬虫和 Agent 都是错误地址。
+ */
+const FALLBACK_SITE_URL = 'http://localhost:3000';
 
 @Injectable()
 export class SeoService {
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
-  private absolute(path: string): string {
-    return `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  /** 请求级 base URL：APP_URL 优先，其次按请求头推导，最后本地兜底 */
+  private baseUrl(req?: { headers?: Record<string, unknown> }): string {
+    const envUrl = process.env.APP_URL?.trim();
+    if (envUrl) return envUrl.replace(/\/$/, '');
+    const headers = req?.headers ?? {};
+    const host = typeof headers['host'] === 'string' ? headers['host'] : '';
+    if (host) {
+      const proto = typeof headers['x-forwarded-proto'] === 'string'
+        ? headers['x-forwarded-proto'].split(',')[0].trim()
+        : 'http';
+      return `${proto}://${host}`;
+    }
+    return FALLBACK_SITE_URL;
+  }
+
+  private absolute(path: string, req?: { headers?: Record<string, unknown> }): string {
+    return `${this.baseUrl(req)}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
   private async productMeta(id: string): Promise<PageMeta | null> {
@@ -154,7 +179,7 @@ export class SeoService {
           '@context': 'https://schema.org',
           '@type': 'Organization',
           name: SITE_NAME,
-          url: SITE_URL,
+          url: this.baseUrl(),
           description: DEFAULT_DESCRIPTION,
         },
       };
@@ -197,7 +222,7 @@ export class SeoService {
       .replace('<!--seo-->', tags);
   }
 
-  async sitemap(): Promise<string> {
+  async sitemap(req?: { headers?: Record<string, unknown> }): Promise<string> {
     const [productRows, collectionRows, pageRows] = await Promise.all([
       this.db
         .select({ id: products.id, updatedAt: products.updatedAt })
@@ -232,7 +257,7 @@ export class SeoService {
     ].join(String.fromCharCode(10));
   }
 
-  robots(): string {
+  robots(req?: { headers?: Record<string, unknown> }): string {
     return [
       'User-agent: *',
       'Allow: /',
@@ -241,34 +266,125 @@ export class SeoService {
       'Disallow: /orders',
       'Disallow: /api/',
       '',
-      `Sitemap: ${this.absolute('/sitemap.xml')}`,
+      `Sitemap: ${this.absolute('/sitemap.xml', req)}`,
       '',
     ].join(String.fromCharCode(10));
   }
 
+  /**
+   * Agent Card（A2A 约定，`/.well-known/agent-card.json`）。
+   *
+   * 作用：让外部 Agent 框架在**不读文档**的情况下发现"这个站点提供什么能力、
+   * 怎么鉴权、有哪些技能"。没有它，每个集成方都要人工对接一遍。
+   *
+   * 刻意只声明**读**技能：Flow 的写操作必须过人审门禁，不能通过 Agent 直连执行。
+   * 这不是能力缺失，而是产品边界——写进 agent card 让集成方一眼看清。
+   */
+  agentCard(req?: { headers?: Record<string, unknown> }): Record<string, unknown> {
+    return {
+      name: 'Flow Commerce',
+      description:
+        'AI-native cross-border commerce platform. Exposes read-only store data to external agents; '
+        + 'all write operations require human approval inside the Flow workbench.',
+      url: this.absolute('/api/mcp', req),
+      provider: { organization: 'Flow', url: this.absolute('/', req) },
+      version: '1.0.0',
+      protocolVersion: '0.3.0',
+      capabilities: {
+        // 与 MCP 端点实际支持的能力保持一致，不声明未实现的
+        streaming: false,
+        pushNotifications: false,
+        stateTransitionHistory: false,
+      },
+      defaultInputModes: ['application/json'],
+      defaultOutputModes: ['application/json'],
+      securitySchemes: {
+        sessionCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'flow_auth',
+          description: 'Seller or admin session cookie issued by the Flow workbench login.',
+        },
+      },
+      security: [{ sessionCookie: [] }],
+      skills: [
+        {
+          id: 'store-overview',
+          name: 'Store overview',
+          description: 'GMV, order counts, visitor counts and pending-shipment totals for the seller store.',
+          tags: ['commerce', 'analytics', 'read-only'],
+          examples: ['How is my store doing today?', 'Show GMV for the last 90 days'],
+        },
+        {
+          id: 'order-query',
+          name: 'Order lookup',
+          description: 'List and filter orders by status or order number.',
+          tags: ['commerce', 'orders', 'read-only'],
+          examples: ['Show unpaid orders', 'Find order ORD20261104ABC'],
+        },
+        {
+          id: 'product-query',
+          name: 'Product lookup',
+          description: 'List products with price, stock and sales, or filter by status.',
+          tags: ['catalog', 'read-only'],
+          examples: ['Which products are drafts?', 'Show my best sellers'],
+        },
+        {
+          id: 'inventory-alert',
+          name: 'Low stock alert',
+          description: 'List variants below a stock threshold.',
+          tags: ['inventory', 'read-only'],
+          examples: ['What is running low?'],
+        },
+        {
+          id: 'refund-queue',
+          name: 'Pending refunds',
+          description: 'List refund requests awaiting seller decision.',
+          tags: ['commerce', 'refunds', 'read-only'],
+          examples: ['Any refunds to review?'],
+        },
+      ],
+      'x-flow-mcp': {
+        transport: 'streamable-http',
+        protocolVersions: ['2025-11-25', '2025-06-18', '2025-03-26'],
+        writeToolsExcluded: true,
+        reason: 'Write operations are gated behind human approval in the Flow workbench.',
+      },
+    };
+  }
+
   /** llms.txt：给 AI 代理/爬虫的可读站点说明（agentic commerce 入口） */
-  llmsTxt(): string {
+  llmsTxt(req?: { headers?: Record<string, unknown> }): string {
     return [
       '# Flow — AI-Native Cross-Border Commerce Platform',
       '',
       '> Flow is an open-source AI-native cross-border e-commerce platform with a buyer storefront and a seller AI workbench. It ships 5 real LLM agents and a human-in-the-loop operations copilot.',
       '',
       '## Public routes',
-      `- Storefront: ${this.absolute('/')}`,
-      `- Products: ${this.absolute('/products')}`,
-      `- Collections: ${this.absolute('/collections/{slug}')}`,
-      `- CMS pages: ${this.absolute('/page/{slug}')}`,
+      `- Storefront: ${this.absolute('/', req)}`,
+      `- Products: ${this.absolute('/products', req)}`,
+      `- Collections: ${this.absolute('/collections/{slug}', req)}`,
+      `- CMS pages: ${this.absolute('/page/{slug}', req)}`,
       '',
       '## APIs',
-      `- Product list: GET ${this.absolute('/api/products')} (JSON, paginated)`,
-      `- Product detail: GET ${this.absolute('/api/products/{id}')}`,
-      `- Storefront sections: GET ${this.absolute('/api/collections/storefront')}`,
-      `- Health: GET ${this.absolute('/api/health')}`,
-      `- OpenAPI: ${this.absolute('/api/openapi.json')}`,
+      `- Product list: GET ${this.absolute('/api/products', req)} (JSON, paginated)`,
+      `- Product detail: GET ${this.absolute('/api/products/{id}', req)}`,
+      `- Storefront sections: GET ${this.absolute('/api/collections/storefront', req)}`,
+      `- Health: GET ${this.absolute('/api/health', req)}`,
+      `- OpenAPI: ${this.absolute('/api/openapi.json', req)}`,
+      '',
+      '## Agent integration (MCP)',
+      `- MCP endpoint: POST ${this.absolute('/api/mcp', req)} (JSON-RPC 2.0, Streamable HTTP transport)`,
+      `- MCP health: GET ${this.absolute('/api/mcp/health', req)}`,
+      '- Protocol versions: 2025-11-25, 2025-06-18, 2025-03-26',
+      '- Read-only by design: only read tools are exposed. Write operations (refunds, price changes, replies)',
+      '  require human approval inside the Flow workbench and are intentionally not callable over MCP.',
+      '- Authentication: the same session cookie as the seller workbench (seller or admin role).',
       '',
       '## Notes',
       '- Prices are in USD. Only products with status=active are publicly visible.',
       '- AI features degrade honestly: without a configured model they return an explicit error instead of fabricated data.',
+      '- Order creation accepts an optional `idempotencyKey`; repeated submissions with the same key return the same order.',
       '',
     ].join(String.fromCharCode(10));
   }

@@ -10,13 +10,13 @@
 
 从开店、上架、成交、履约、客服到复盘，整条运营闭环都在这里。
 
-[![Version](https://img.shields.io/badge/version-v1.23.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.24.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-286%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-349%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -34,7 +34,7 @@
 
 | | 买家商城 | 卖家 AI 工作台 |
 |---|---|---|
-| **面向** | 海外消费者，四种语言（en / zh / es / pt） | 经营店铺的商家 |
+| **面向** | 海外消费者，界面支持四种语言（en / zh / es / pt）；商品文案为 en + zh 双语 | 经营店铺的商家 |
 | **核心** | 搜索、筛选、SKU 规格、购物车、优惠券、结算、物流、退款、评价 | 看板、商品、订单、退款、集合、优惠券、CMS、审计、AI |
 | **AI** | 导购：先推荐，加购前必须确认 | 五个专业 Agent + 带人工审批的工具调用副驾 |
 
@@ -85,6 +85,34 @@
 | 演示支付 | 仅 `development` / `test` 放行，生产环境一律 403，任何开关都不能绕过 |
 | 出站请求 | webhook、通知地址、LLM Base URL 统一拒绝环回 / 私网 / CGNAT / 链路本地 / 云元数据，并绑定 DNS 解析结果、不跟随重定向 |
 | 上架门禁 | 六项完整性校验（图片、库存、文案、类目、价格、规格）全部通过才允许上架 |
+
+### 4. Agent 能接进来——但只能读
+
+Flow 通过 **MCP（Model Context Protocol）** 的 Streamable HTTP 传输在 `POST /api/mcp` 暴露能力，并在 `/.well-known/agent-card.json` 提供 A2A 风格的 Agent Card。Claude、Cursor 或任何 MCP 客户端都能直接连上店铺查真实数据。
+
+能力边界是刻意的，且在代码里强制执行：
+
+| 层 | 对 Agent 开放 | 原因 |
+|---|---|---|
+| 读工具（店铺概况、订单、商品、低库存、待处理退款） | ✅ 可经 MCP 调用 | 安全、幂等、按租户隔离 |
+| 写工具（批准退款、改价、回复买家） | ❌ MCP 返回 `-32602` 并说明原因 | 资金动作必须由人在审批卡上确认 |
+
+工具 schema 由**单一契约**（`copilot-tool-contract.ts`）生成，同时供给四个消费方：模型目录、审批卡 UI、MCP `inputSchema`、OpenAPI 规范。新增工具不再可能在四处之间漂移。
+
+---
+
+## 可靠性保证
+
+电商代码失败的方式往往很无聊：双击、重试、退款途中进程被杀。下面每条路径都有明确的机制，而不是靠"应该不会"。
+
+| 失败场景 | 机制 |
+|---|---|
+| 结算页重复提交 | `orders.idempotency_key` + 部分唯一索引；同键返回同一张订单 |
+| 退款时渠道超时 | 请求携带 `Idempotency-Key`（Stripe）/ `PayPal-Request-Id`；退款单号与 `provider_state` 在业务事务**之前**落库 |
+| 渠道已退、写库失败 | 退款保持 `provider_state = inflight` 供对账，而不是重试导致重复打款 |
+| 审批卡放置数天 | `copilot_actions.expires_at`（24 小时），过期后拒绝执行 |
+| 审批途中进程退出 | `lease_until` + 60 秒看门狗回收为 failed，并明确提示人工核对 |
+| 审批后工具语义变更 | `policy_snapshot` 指纹不匹配即让旧审批失效 |
 
 ---
 
@@ -187,14 +215,14 @@ FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
 | 维度 | 现状 |
 |---|---|
 | 类型 | TypeScript strict；前后端共享 `shared/api.interface.ts` 单一契约 |
-| 模块 | 25 个 NestJS 模块、25 个 controller、155 个端点、39 张表、9 个 SQL 迁移 |
-| 测试 | 286 个用例 / 45 个文件（金额、退款、运费、状态机、验签、租户、搜索、SEO、通知） |
+| 模块 | 26 个 NestJS 模块、26 个 controller、160 个端点、39 张表、11 个 SQL 迁移 |
+| 测试 | 349 个用例 / 52 个文件（金额、退款、运费、状态机、幂等、验签、租户、搜索、SEO、MCP、通知） |
 | E2E | 六套：工作流 16 步、无 Key 降级、交易 19 步、渠道 18 步、副驾 19 步、导购 9 步 |
 | 浏览器 QA | `npm run qa:journey` 用真实浏览器走遍买家与卖家全部路由，任何控制台错误、请求失败或内容缺失都判失败 |
 | CI | lint → typecheck → 单测+覆盖率 → 生产依赖审计 → 构建 → Postgres E2E |
 | 安全 | HttpOnly Cookie JWT、CSRF 头校验、按端点限流、Stripe/PayPal 验签、租户隔离、SSRF 与重放防护 |
 | 可观测 | 请求 ID、全局异常脱敏、结构化错误、AI 用量计量 |
-| 可集成 | OpenAPI 3.1（`/api/openapi.json`）、`sitemap.xml`、`robots.txt`、`llms.txt` |
+| 可集成 | OpenAPI 3.1（`/api/openapi.json`）、MCP（`/api/mcp`）、Agent Card（`/.well-known/agent-card.json`）、`sitemap.xml`、`robots.txt`、`llms.txt` |
 
 ---
 
@@ -246,6 +274,7 @@ Flow 刻意选择「单进程 + REST」，优先保证交易正确性与租户�
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构、数据库表、AI 网关、Copilot 协议、安全模型 |
 | [docs/AI-AGENTS.md](docs/AI-AGENTS.md) | 五个 Agent、自定义 Agent、Copilot 工具与降级行为 |
+| [docs/MCP.md](docs/MCP.md) | 通过 MCP 连接外部 Agent：端点、工具、能力边界、curl 验证 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | 部署、密钥清单、备份升级、排障 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 已交付、下一阶段、明确不做 |
 | [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | 当前版本发布说明与已知边界 |
@@ -259,10 +288,10 @@ Flow 刻意选择「单进程 + REST」，优先保证交易正确性与租户�
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | **v1.23.0** |
+| 当前版本 | **v1.24.0** |
 | 状态 | 功能闭环，维护模式：修 bug、打安全补丁、升级依赖 |
 | CI | GitHub Actions 执行 lint、typecheck、单测+覆盖率、生产依赖审计、构建、六套 Postgres E2E |
-| 测试 | 286 / 286（45 文件） |
+| 测试 | 349 / 349（52 文件） |
 | 许可 | MIT |
 
 ---

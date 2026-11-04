@@ -12,8 +12,8 @@ Flow follows [Semantic Versioning 2.0.0](https://semver.org/):
 | Change | Version bump | Example |
 |---|---|---|
 | Breaking API, schema or config change | MAJOR | v1.x.x → v2.0.0 |
-| New feature, backwards compatible | MINOR | v1.22.0 → v1.23.0 |
-| Bug fix, security patch, dependency bump | PATCH | v1.23.0 → v1.23.1 |
+| New feature, backwards compatible | MINOR | v1.23.0 → v1.24.0 |
+| Bug fix, security patch, dependency bump | PATCH | v1.24.0 → v1.24.1 |
 
 Rules:
 
@@ -30,9 +30,9 @@ Rules:
 
 | Field | Value |
 |---|---|
-| Version | v1.23.0 |
-| Previous stable | v1.22.0 (2026-11-01) |
-| Next planned | v1.24.0 — see `docs/ROADMAP.md` |
+| Version | v1.24.0 |
+| Previous stable | v1.23.0 (2026-11-02) |
+| Next planned | v1.25.0 — see `docs/ROADMAP.md` |
 
 ---
 
@@ -127,8 +127,8 @@ npm run capture:all
 
 # 5. Commit and tag
 git add -A
-git commit -m "chore(release): v1.23.0"
-git tag -a v1.23.0 -m "Flow v1.23.0"
+git commit -m "chore(release): v1.24.0"
+git tag -a v1.24.0 -m "Flow v1.24.0"
 git push origin main --tags
 
 # 6. Push mirrors

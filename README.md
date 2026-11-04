@@ -10,13 +10,13 @@
 
 From listing to fulfilment to support to review — the whole operating loop lives here.
 
-[![Version](https://img.shields.io/badge/version-v1.23.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.24.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-286%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-349%20passing-10b981?style=flat-square)](server)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
@@ -35,7 +35,7 @@ From listing to fulfilment to support to review — the whole operating loop liv
 
 | | Buyer storefront | Seller AI workbench |
 |---|---|---|
-| **Audience** | Overseas shoppers, four locales (en / zh / es / pt) | Merchants running the store |
+| **Audience** | Overseas shoppers, four UI locales (en / zh / es / pt); product copy is authored in en + zh | Merchants running the store |
 | **Core** | Search, filters, SKU variants, cart, coupons, checkout, tracking, refunds, reviews | Dashboard, catalog, orders, refunds, collections, coupons, CMS, audit, AI |
 | **AI** | Shopping guide that recommends and confirms before adding to cart | Five specialist agents plus a tool-calling copilot with human approval |
 
@@ -86,6 +86,38 @@ Each runs through a single gateway that normalizes provider differences (reasoni
 | Demo payments | Allowed only in `development` / `test`; production returns 403 regardless of flags |
 | Outbound requests | Webhook URLs, notification targets and LLM base URLs reject loopback, private, CGNAT, link-local and metadata addresses, with DNS pinning and no redirect following |
 | Publish gate | Six completeness checks (images, stock, copy, category, price, variants) before a product can go live |
+
+### 4. Agents can connect — but only to read
+
+Flow speaks **MCP (Model Context Protocol)** over Streamable HTTP at `POST /api/mcp`, plus an A2A-style agent card at `/.well-known/agent-card.json`. Claude, Cursor, or any MCP client can point at a Flow store and query real data.
+
+The capability boundary is deliberate and enforced in code:
+
+| Layer | Exposed to agents | Why |
+|---|---|---|
+| Read tools (`get_store_overview`, `list_orders`, `list_products`, `list_low_stock`, `list_pending_refunds`) | ✅ over MCP | Safe, idempotent, tenant-scoped |
+| Write tools (refund approval, price change, replies) | ❌ MCP returns `-32602` with the reason | Money-moving actions require a human at the approval card |
+
+```bash
+curl -b cookies.txt -X POST http://localhost:3000/api/mcp   -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest'   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Tool schemas are generated from one contract (`copilot-tool-contract.ts`) and feed **four** consumers: the model catalog, the approval UI, the MCP `inputSchema`, and the OpenAPI spec. Adding a tool can no longer drift between them.
+
+---
+
+## Durability guarantees
+
+Commerce code fails in boring ways: a double-click, a retried request, a process killed mid-refund. Each path below has an explicit mechanism rather than hope.
+
+| Failure mode | Mechanism |
+|---|---|
+| Double-submitted checkout | `orders.idempotency_key` + partial unique index; the same key returns the same order |
+| Provider timeout during refund | `Idempotency-Key` (Stripe) / `PayPal-Request-Id` sent; refund id + `provider_state` persisted **before** the business transaction |
+| Crash between provider call and DB write | Refund keeps `provider_state = inflight` for reconciliation instead of retrying and double-paying |
+| Approval card left for days | `copilot_actions.expires_at` (24 h); expired actions refuse execution |
+| Process dies mid-approval | `lease_until` + a 60 s reaper marks it failed with an explicit "verify manually" message |
+| Tool semantics change after approval | `policy_snapshot` fingerprint mismatch invalidates the stale approval |
 
 ---
 
@@ -188,14 +220,14 @@ Resolution order: **UI settings → `LLM_*` environment variables → unconfigur
 | Dimension | State |
 |---|---|
 | Types | TypeScript strict; client and server share `shared/api.interface.ts` as the single contract |
-| Modules | 25 NestJS modules, 25 controllers, 155 endpoints, 39 tables, 9 SQL migrations |
-| Tests | 286 unit/integration cases across 45 files (money, refunds, shipping, state machines, signatures, tenancy, search, SEO, notifications) |
+| Modules | 26 NestJS modules, 26 controllers, 160 endpoints, 39 tables, 11 SQL migrations |
+| Tests | 349 unit/integration cases across 52 files (money, refunds, shipping, state machines, idempotency, signatures, tenancy, search, SEO, MCP, notifications) |
 | E2E | Six suites: 16-step workflows, no-key degradation, 19-step transactions, 18-step providers, 19-step copilot, 9-step shopper |
 | Browser QA | `npm run qa:journey` walks every buyer and seller route in a real browser and fails on any console error, failed request or missing content |
 | CI | lint → typecheck → unit+coverage → production audit → build → Postgres E2E |
 | Security | HttpOnly cookie JWT, CSRF header check, per-endpoint rate limits, Stripe/PayPal signature verification, tenant isolation, SSRF and replay protection |
 | Observability | Request IDs, global exception redaction, structured errors, AI usage metering |
-| Integrations | OpenAPI 3.1 (`/api/openapi.json`), `sitemap.xml`, `robots.txt`, `llms.txt` |
+| Integrations | OpenAPI 3.1 (`/api/openapi.json`), MCP (`/api/mcp`), Agent Card (`/.well-known/agent-card.json`), `sitemap.xml`, `robots.txt`, `llms.txt` |
 
 ---
 
@@ -247,6 +279,7 @@ Flow is deliberately a single deployable process over REST, optimizing for trans
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, database tables, AI gateway, copilot protocol, security model |
 | [docs/AI-AGENTS.md](docs/AI-AGENTS.md) | Five agents, custom agents, copilot tools and degradation behaviour |
+| [docs/MCP.md](docs/MCP.md) | Connecting external agents over MCP: endpoint, tools, capability boundary, curl recipes |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Deployment, secret list, backup and upgrade, troubleshooting |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What shipped, what is next, what is out of scope |
 | [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | Current release notes and known limits |
@@ -260,10 +293,10 @@ Flow is deliberately a single deployable process over REST, optimizing for trans
 
 | Item | Value |
 |---|---|
-| Current version | **v1.23.0** |
+| Current version | **v1.24.0** |
 | State | Feature-complete and maintained: bug fixes, security patches, dependency upgrades |
 | CI | GitHub Actions runs lint, typecheck, unit tests with coverage, production audit, build and six Postgres E2E suites |
-| Tests | 286 / 286 across 45 files |
+| Tests | 349 / 349 across 52 files |
 | Licence | MIT |
 
 ---

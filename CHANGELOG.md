@@ -5,6 +5,59 @@
 
 ---
 
+## [1.24.0] — 2026-11-04
+
+**主题：资金与审批链路的可靠性，外加 Agent 互操作。** 这一版没有加新页面，而是把
+"会真的丢钱 / 会永久卡住 / 会对集成方撒谎"的路径逐个补上机制，并让外部 Agent
+能以标准协议接入（只读）。
+
+### Added
+
+- **MCP 服务端**（`POST /api/mcp`，Streamable HTTP，JSON-RPC 2.0）：支持 `initialize` /
+  `tools/list` / `tools/call` / `ping`，协商 `2025-11-25` / `2025-06-18` / `2025-03-26`
+  三个协议版本。**只暴露 5 个只读工具**；写工具返回 `-32602` 并说明必须走人工审批。
+  `/api/mcp/health` 为公开探活端点。
+- **Agent Card**（`/.well-known/agent-card.json`）：A2A 约定的机器可读能力声明，
+  含技能列表、鉴权方式与"写操作不开放"的显式说明。
+- **工具契约层** `copilot-tool-contract.ts`：一份声明同时生成模型目录、审批卡风险元数据、
+  MCP `inputSchema`、OpenAPI 工具 schema。`policyFingerprint()` 为审批动作固化语义指纹。
+- **审批看门狗** `CopilotActionReaperService`：每 60 秒回收租约过期的 `processing` 动作、
+  作废超过 24 小时的 `pending` 动作。
+- **模型价目表与成本核算** `model-pricing.ts`：按输入/输出/缓存命中分别计价，
+  未收录模型返回 `null`（显示"未收录"）而不是编造金额。
+- **重试策略** `retry-policy.ts`：429 / 408 / 5xx / 网络错误指数退避重试（尊重 `Retry-After`），
+  401/403/404 立即失败。
+- **任务级模型路由**：`AiGatewayService.resolveTaskModel()`，可在「模型设置」中为
+  copywriter / support / trend 等任务分别指定模型。
+- **AI 用量面板**新增累计成本、缓存命中率、按 Agent 成本分布。
+- 迁移 `0009_reliability_core.sql`、`0010_order_status_drop_processing.sql`。
+- 测试：`mcp.controller.spec.ts`（12）、`copilot-tool-contract.spec.ts`（10）、
+  `model-pricing.spec.ts`（8）、`retry-policy.spec.ts`（8）、`order-idempotency.spec.ts`（5）、
+  SEO URL 解析（6）等，总数 286 → 349。
+
+### Fixed
+
+- **退款顺序**：渠道退款成功后立即落库 `provider_refund_id` 与 `provider_state`，
+  不再等业务事务——此前"渠道已退、写库失败"会让同一笔退款有机会被再次打款。
+- **渠道幂等键**：Stripe 发 `Idempotency-Key`，PayPal 发 `PayPal-Request-Id`，
+  超时重试不会再退第二笔。
+- **下单幂等**：`orders.idempotency_key` + 部分唯一索引，重复提交返回同一张订单；
+  前端结算页在进入时生成一次键并复用。
+- **订单状态机**：`paid → delivered` 显式声明（数字商品/自提），终态改为显式空数组；
+  删除数据库枚举里从未被任何迁移使用的 `processing`（对外暴露了一个永远达不到的状态）。
+- **站点绝对 URL**：未配置 `APP_URL` 时按请求 `Host` / `X-Forwarded-Proto` 推导，
+  不再一律输出 `localhost:3000`——影响 sitemap、robots、llms.txt、agent card。
+- **OpenAPI 版本漂移**：`info.version` 从 `1.22.0` 修正为与 `package.json` 一致。
+- 前端审批卡不再维护第二份 `TOOL_META`：风险等级与不可逆标记改为读服务端契约，
+  避免"服务端升为高风险、前端仍显示中风险"。
+
+### Changed
+
+- `CopilotToolsView` / `AIUsageStats` / `OrderStatus` 契约同步更新。
+- README 重写：新增 Agent 互操作与可靠性保证两节，测试与模块计数按实际更新。
+
+---
+
 ## [1.23.0] — 2026-11-02
 
 **主题：可验证性、可移植性与文档对齐。** 不新增产品功能，让既有平台在作者机器之外可证明地跑起来，

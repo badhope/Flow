@@ -1,18 +1,13 @@
 import React from 'react';
 import { AlertTriangle, Check, ShieldAlert, X } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useToolContract } from '@/contexts/ToolContractContext';
 import type { CopilotAction } from '@shared/api.interface';
 
-/** 工具 -> 风险等级与中文说明（写操作都要过人工门禁） */
-const TOOL_META: Record<string, { risk: 'low' | 'medium' | 'high'; zh: string; en: string }> = {
-  update_order_status: { risk: 'medium', zh: '修改订单状态', en: 'Change order status' },
-  approve_refund: { risk: 'high', zh: '批准退款（真实打款）', en: 'Approve refund (real payout)' },
-  reject_refund: { risk: 'medium', zh: '拒绝退款申请', en: 'Reject refund request' },
-  update_product_status: { risk: 'low', zh: '商品上下架', en: 'Toggle product status' },
-  create_coupon: { risk: 'medium', zh: '创建优惠券', en: 'Create coupon' },
-  create_draft_product: { risk: 'low', zh: '创建商品草稿', en: 'Create product draft' },
-  send_inquiry_reply: { risk: 'low', zh: '回复买家咨询', en: 'Reply to buyer inquiry' },
-};
+/**
+ * 风险元数据从服务端工具契约读取（见 ToolContractContext），前端不再维护第二份映射表。
+ * 契约尚未加载时回退到 medium（保守，不误标为 low）。
+ */
 
 const RISK_STYLE = {
   low: {
@@ -47,7 +42,12 @@ interface ApprovalCardProps {
 const ApprovalCard: React.FC<ApprovalCardProps> = ({ action, onApprove, onReject, busy }) => {
   const { language } = useLanguage();
   const zh = language === 'zh';
-  const meta = TOOL_META[action.toolName] ?? { risk: 'medium' as const, zh: action.toolName, en: action.toolName };
+  const contract = useToolContract(action.toolName);
+  const meta = {
+    risk: (contract?.risk ?? 'medium') as 'low' | 'medium' | 'high',
+    zh: contract?.labelZh || action.toolName,
+    en: contract?.labelEn || action.toolName,
+  };
   const style = RISK_STYLE[meta.risk];
   const RiskIcon = style.icon;
 
@@ -66,6 +66,11 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({ action, onApprove, onReject
           <span className="text-sm font-medium text-[var(--flow-text-1)]">
             {zh ? meta.zh : meta.en}
           </span>
+          {contract?.irreversible && (
+            <span className="rounded bg-[var(--flow-danger)]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--flow-danger)]">
+              {zh ? '不可逆' : 'IRREVERSIBLE'}
+            </span>
+          )}
           <span className="flow-mono ml-auto text-[11px] text-[var(--flow-text-3)]">
             {action.toolName}
           </span>
