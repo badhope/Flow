@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Sparkles, TrendingUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ShoppingBag, Sparkles } from 'lucide-react';
 import { Image } from '@/components/ui/image';
 import ProductCard from '@/components/ProductCard';
+import StoreSection from '@/components/StoreSection';
 import CollectionFloors from '@/components/CollectionFloors';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getFeaturedProducts, listProducts, getProductsByIds } from '@/api/products';
@@ -15,6 +15,9 @@ import type { Product, Category, StorefrontSection } from '@shared/api.interface
 import { notifyError } from '@/lib/error-feedback';
 import { getRecentlyViewed } from '@/utils/recently-viewed';
 import { applyCanonical, applyDocumentMeta, injectOrganizationJsonLd } from '@/lib/seo';
+
+/** 两位序号：01、02… 保证分区编号在任意楼层数量下都连续 */
+const pad = (n: number): string => String(n).padStart(2, '0');
 
 const HomePage: React.FC = () => {
   const { user } = useAuth();
@@ -238,24 +241,23 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Categories · 横向 chip 条 */}
-      <section className="border-b border-slate-200/70 bg-white">
-        <div className="container mx-auto flex items-center gap-3 overflow-x-auto px-6 py-4">
-          <span className="shrink-0 text-xs font-medium text-slate-400">
-            {language === 'zh' ? '分类' : 'Categories'}
+      {/* Categories · 目录式标签条 */}
+      <nav
+        aria-label={t.home.categories}
+        className="border-b border-[var(--store-line)] bg-white"
+      >
+        <div className="container mx-auto flex items-center gap-1 overflow-x-auto px-6 py-2.5">
+          <span className="mr-1 shrink-0 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-[var(--store-faint)]">
+            {language === 'zh' ? '分类' : 'Browse'}
           </span>
           {displayCategories.map((cat: Category) => {
             const name: string = language === 'zh' ? cat.nameZh : cat.nameEn;
             return (
-              <Link
-                key={cat.id}
-                to={`/products?category=${cat.id}`}
-                className="group flex shrink-0 items-center gap-2 rounded-full border border-slate-200 px-3.5 py-1.5 text-xs text-slate-600 transition-all hover:border-slate-900 hover:bg-slate-900 hover:text-white"
-              >
+              <Link key={cat.id} to={`/products?category=${cat.id}`} className="store-chip">
                 {cat.icon ? (
-                  <Image src={cat.icon} alt={name} width={14} height={14} className="size-3.5" />
+                  <Image src={cat.icon} alt="" width={14} height={14} className="size-3.5" />
                 ) : (
-                  <ShoppingBag className="size-3.5" />
+                  <ShoppingBag className="size-3.5 opacity-60" aria-hidden="true" />
                 )}
                 {name}
               </Link>
@@ -263,88 +265,87 @@ const HomePage: React.FC = () => {
           })}
           <Link
             to="/products"
-            className="ml-auto inline-flex shrink-0 items-center py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900"
+            className="ml-auto inline-flex min-h-[32px] shrink-0 items-center px-2 text-xs font-medium text-[var(--store-muted)] transition-colors hover:text-[var(--store-ink)]"
           >
             {t.home.viewAll} →
           </Link>
         </div>
-      </section>
+      </nav>
 
       {/* Collection Floors（运营楼层） */}
       <CollectionFloors sections={floors} favoriteIds={favoriteIds} loading={loading} />
 
       {/* Hot Products */}
-      <section className="container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="size-5 text-orange-500" />
-            <h2 className="text-xl font-semibold text-slate-900">
-              {t.home.hotProducts}
-            </h2>
-          </div>
-          <Button variant="ghost" asChild>
-            <Link to="/products?sortBy=sold_desc">{t.home.viewAll}</Link>
-          </Button>
-        </div>
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">
-            {t.common.loading}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-             {hotProducts.map((product: Product) => (
-               <ProductCard
-                 key={product.id}
-                 product={product}
-                 favorited={favoriteIds.has(product.id)}
-               />
-             ))}
-          </div>
-        )}
-      </section>
+      <div className="container mx-auto px-6 py-10">
+        <StoreSection
+          index={pad(floors.length + 1)}
+          title={t.home.hotProducts}
+          subtitle={t.home.hotSubtitle}
+          action={{ label: t.home.viewAll, to: '/products?sortBy=sold_desc' }}
+        >
+          {loading ? (
+            <div className="py-12 text-center text-sm text-[var(--store-faint)]">
+              {t.common.loading}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 xl:grid-cols-5">
+              {hotProducts.map((product: Product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  favorited={favoriteIds.has(product.id)}
+                />
+              ))}
+            </div>
+          )}
+        </StoreSection>
+      </div>
 
       {recentProducts.length > 0 && (
-        <section className="container mx-auto px-6 py-8">
-          <h2 className="text-xl font-semibold text-slate-900 mb-6">
-            {language === 'zh' ? '最近浏览' : 'Recently viewed'}
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {recentProducts.map((product: Product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+        <div className="border-t border-[var(--store-line)]">
+          <div className="container mx-auto px-6 py-10">
+            <StoreSection
+              index={pad(floors.length + 2)}
+              title={language === 'zh' ? '最近浏览' : 'Recently viewed'}
+              subtitle={t.home.recentSubtitle}
+            >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 xl:grid-cols-5">
+                {recentProducts.map((product: Product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </StoreSection>
           </div>
-        </section>
+        </div>
       )}
 
       {/* New Arrivals */}
-      <section className="container mx-auto px-6 py-8 pb-16">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-5 text-sky-500" />
-            <h2 className="text-xl font-semibold text-slate-900">
-              {t.home.newArrivals}
-            </h2>
-          </div>
-          <Button variant="ghost" asChild>
-            <Link to="/products?sortBy=newest">{t.home.viewAll}</Link>
-          </Button>
+      <div className="border-t border-[var(--store-line)]">
+        <div className="container mx-auto px-6 py-10 pb-16">
+          <StoreSection
+            index={pad(floors.length + (recentProducts.length > 0 ? 3 : 2))}
+            title={t.home.newArrivals}
+            subtitle={t.home.newSubtitle}
+            action={{ label: t.home.viewAll, to: '/products?sortBy=newest' }}
+          >
+            {loading ? (
+              <div className="py-12 text-center text-sm text-[var(--store-faint)]">
+                {t.common.loading}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 xl:grid-cols-5">
+                {newProducts.map((product: Product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    favorited={favoriteIds.has(product.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </StoreSection>
         </div>
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">
-            {t.common.loading}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-             {newProducts.map((product: Product) => (
-               <ProductCard
-                 key={product.id}
-                 product={product}
-                 favorited={favoriteIds.has(product.id)}
-               />
-             ))}
-          </div>
-        )}
-      </section>
+      </div>
     </div>
   );
 };

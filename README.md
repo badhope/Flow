@@ -10,7 +10,7 @@
 
 From listing to fulfilment to support to review — the whole operating loop lives here.
 
-[![Version](https://img.shields.io/badge/version-v1.24.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.25.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -87,7 +87,22 @@ Each runs through a single gateway that normalizes provider differences (reasoni
 | Outbound requests | Webhook URLs, notification targets and LLM base URLs reject loopback, private, CGNAT, link-local and metadata addresses, with DNS pinning and no redirect following |
 | Publish gate | Six completeness checks (images, stock, copy, category, price, variants) before a product can go live |
 
-### 4. Agents can connect — but only to read
+### 4. Two interfaces, one visual language
+
+The storefront is not a generic commerce template in a different colour. It is designed as a **curated AI buyer's shop**:
+
+| Decision | What it looks like | Why |
+|---|---|---|
+| Price is a fact, not a trigger | Ink-navy, tabular figures (no promo orange) | Flow helps you choose, it doesn't pressure you into a sale |
+| Editorial section headers | `01 — Hot products`, a hairline rule, one line of rationale | Icon + bold heading is what every template does, so readers skip it |
+| Paper-feel cards | 1px outline, near-white fill, border turns ink on hover | Lower visual noise, higher information density at the same size |
+| Quiet discount tags | Small outlined label, not a starburst | A real bargain doesn't need to shout |
+
+The seller workbench stays dark with electric-lime accents — dense, keyboard-driven, built for hours of screen time. Same tokens, different modality.
+
+---
+
+### 5. Agents can connect — but only to read
 
 Flow speaks **MCP (Model Context Protocol)** over Streamable HTTP at `POST /api/mcp`, plus an A2A-style agent card at `/.well-known/agent-card.json`. Claude, Cursor, or any MCP client can point at a Flow store and query real data.
 
@@ -293,7 +308,7 @@ Flow is deliberately a single deployable process over REST, optimizing for trans
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.0** |
+| Current version | **v1.25.0** |
 | State | Feature-complete and maintained: bug fixes, security patches, dependency upgrades |
 | CI | GitHub Actions runs lint, typecheck, unit tests with coverage, production audit, build and six Postgres E2E suites |
 | Tests | 349 / 349 across 52 files |

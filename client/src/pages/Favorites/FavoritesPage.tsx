@@ -60,7 +60,7 @@ const FavoritesPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
@@ -68,7 +68,7 @@ const FavoritesPage: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="flow-store min-h-screen flex flex-col items-center justify-center gap-4">
+      <div className="flow-store flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Heart className="size-16 text-slate-300" />
         <p className="text-slate-500">{t.auth.loginToContinue}</p>
         <Link to="/login">
@@ -79,7 +79,7 @@ const FavoritesPage: React.FC = () => {
   }
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">

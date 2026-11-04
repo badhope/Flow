@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, LayoutGrid } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { StorefrontSection } from '@shared/api.interface';
@@ -17,7 +17,7 @@ const FloorLink: React.FC<{ slug: string }> = ({ slug }) => {
   return (
     <Link
       to={`/collections/${slug}`}
-      className="group inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition-all hover:border-blue-300 hover:text-blue-600 hover:shadow"
+      className="group inline-flex min-h-[32px] shrink-0 items-center gap-1 rounded-full border border-[var(--store-line-strong)] bg-white px-3.5 py-1.5 text-xs font-medium text-[var(--store-muted)] transition-colors hover:border-[var(--store-ink)] hover:text-[var(--store-ink)]"
     >
       {t.home.viewAll}
       <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -44,7 +44,7 @@ const CollectionFloors: React.FC<CollectionFloorsProps> = ({ sections, favoriteI
 
   return (
     <>
-      {sections.map((section) => {
+      {sections.map((section, sectionIndex) => {
         const title = language === 'zh' ? section.titleZh : section.titleEn;
         const description = language === 'zh'
           ? section.descriptionZh ?? section.descriptionEn
@@ -52,22 +52,24 @@ const CollectionFloors: React.FC<CollectionFloorsProps> = ({ sections, favoriteI
 
         return (
           <section key={section.id} className="container mx-auto px-6 py-8">
-            <div className="mb-6 flex items-end justify-between gap-4">
-              <div className="min-w-0">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-sky-400 text-white shadow-sm">
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                  </span>
-                  <h2 className="truncate text-xl font-semibold text-slate-900">{title}</h2>
+            <div className="store-section">
+              <div className="store-section-head">
+                {/* 运营楼层接在首页内置分区（01–03）之后继续编号，避免两套序号并存 */}
+                <span className="store-section-index">
+                  {String(sectionIndex + 1).padStart(2, '0')}
+                </span>
+                <span className="store-section-rule" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h2 className="store-section-title truncate">{title}</h2>
+                  {description && (
+                    <p className="store-section-sub truncate">{description}</p>
+                  )}
                 </div>
-                {description && (
-                  <p className="truncate text-sm text-slate-500">{description}</p>
-                )}
               </div>
               <FloorLink slug={section.slug} />
             </div>
 
-            <div className="-mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
+            <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
               {section.products.map((product) => (
                 <div
                   key={product.id}

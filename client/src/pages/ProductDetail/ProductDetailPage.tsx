@@ -173,7 +173,7 @@ const ProductDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
@@ -181,7 +181,7 @@ const ProductDetailPage: React.FC = () => {
 
   if (!product) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.error}
       </div>
     );
@@ -299,7 +299,7 @@ const ProductDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6" id="reviews">
         <Button
           variant="ghost"
@@ -322,7 +322,7 @@ const ProductDetailPage: React.FC = () => {
                   sizes="(max-width: 1024px) 100vw, 50vw"
                 />
                 {isOnSale && (
-                  <Badge className="absolute top-4 left-4 bg-orange-500 hover:bg-orange-500 text-sm px-3 py-1">
+                  <Badge className="absolute left-3 top-3 rounded-[4px] border border-[var(--store-line-strong)] bg-white px-2 py-0.5 text-[11px] font-semibold text-[var(--store-ink)] hover:bg-white">
                     -
                     {Math.round(
                       ((Number(displayOriginalPrice) - Number(displayPrice)) /
@@ -375,26 +375,26 @@ const ProductDetailPage: React.FC = () => {
           {/* Info */}
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 mb-2">
+              <h1 className="mb-2 text-[1.375rem] font-semibold leading-tight tracking-[-0.02em] text-[var(--store-ink)] sm:text-2xl">
                 {title}
               </h1>
-              <p className="text-slate-500">{desc}</p>
+              <p className="text-sm leading-relaxed text-[var(--store-muted)]">{desc}</p>
             </div>
 
-            {/* Price */}
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-orange-500">
+            {/* Price：墨色 + 等宽，价格是事实而不是促销信号 */}
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-y border-[var(--store-line)] py-3.5">
+              <span className="store-price text-3xl leading-none">
                 ${Number(displayPrice).toFixed(2)}
               </span>
               {isOnSale && (
-                <span className="text-lg text-slate-400 line-through">
+                <span className="store-price-was text-base">
                   ${Number(displayOriginalPrice).toFixed(2)}
                 </span>
               )}
               {isOnSale && (
-                <Badge variant="secondary" className="bg-orange-50 text-orange-600 border-orange-100">
-                  {t.product.originalPrice}
-                </Badge>
+                <span className="store-tag">
+                  −{Math.round(((Number(displayOriginalPrice) - Number(displayPrice)) / Number(displayOriginalPrice)) * 100)}%
+                </span>
               )}
             </div>
 
@@ -472,7 +472,7 @@ const ProductDetailPage: React.FC = () => {
               </Button>
               <Button
                 size="lg"
-                className="flex-1 bg-orange-500 hover:bg-orange-600"
+                className="flex-1 border border-[var(--store-ink)] bg-[var(--store-ink)] text-white hover:bg-[var(--store-ink)]/90"
                 onClick={() => void handleBuyNow()}
                 disabled={stockForSelected === 0 || addingToCart}
               >

@@ -141,7 +141,7 @@ const CartPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
@@ -150,7 +150,7 @@ const CartPage: React.FC = () => {
   const isEmpty: boolean = !cart || cart.items.length === 0;
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">
           {t.cart.title}
@@ -277,7 +277,7 @@ const CartPage: React.FC = () => {
                             </Button>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="font-bold text-orange-500">
+                            <span className="store-price font-bold">
                               ${subtotal.toFixed(2)}
                             </span>
                             <Button
@@ -315,7 +315,7 @@ const CartPage: React.FC = () => {
                     </div>
                     <div className="border-t pt-3 flex justify-between font-semibold text-slate-900">
                       <span>{t.cart.total}</span>
-                      <span className="text-lg text-orange-500">
+                      <span className="store-price text-lg">
                         ${Number(cart?.total || 0).toFixed(2)}
                       </span>
                     </div>

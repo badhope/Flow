@@ -123,3 +123,225 @@
   border-radius: var(--store-radius);
   background: var(--store-surface);
 }
+
+/* ============================================================================
+   买家端品牌层 v2 —— 「可信赖的 AI 买手店」
+   ----------------------------------------------------------------------------
+   设计决策（不是参数微调）：
+
+   1. 价格不再用橙色。橙色是「促销电商」的默认符号，与 Flow 的"AI 帮你挑，
+      不靠打折逼单"定位冲突。改用品牌墨蓝 + 等宽数字：价格是**事实**，
+      不是**刺激**。
+
+   2. 分区标题改为「编辑式」：序号 + 竖线 + 标题 + 一句话说明。
+      电商模板用图标 + 粗体标题，看起来都一样；加序号让它像一本被编辑过的
+      买手目录，而不是无限滚动的瀑布。
+
+   3. 卡片去掉统一圆角大阴影，改为「纸感」：1px 描边 + 极浅底 + hover 时
+      描边转墨色。信息密度提高，视觉噪音下降。
+
+   4. 折扣角标从"爆炸贴"改为安静标签：细描边 + 墨字，只在 hover 时转实心。
+      真正的便宜不需要喊。
+   ========================================================================== */
+
+/* ---- 价格与数字：统一等宽，建立"可核对"的可信感 ---- */
+.flow-store .store-price,
+.flow-store .store-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+  letter-spacing: -0.02em;
+}
+
+.flow-store .store-price {
+  font-weight: 600;
+  color: var(--store-ink);
+}
+
+/* 原价：不再用删除线糊在一起，降一级灰并缩小 */
+.flow-store .store-price-was {
+  font-variant-numeric: tabular-nums;
+  color: var(--store-faint);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* ---- 编辑式分区标题 ---- */
+.flow-store .store-section {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.flow-store .store-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* 序号：细体、大写、宽字距，像目录页码 */
+.flow-store .store-section-index {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--store-faint);
+  flex-shrink: 0;
+}
+
+.flow-store .store-section-rule {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--store-line-strong);
+  flex-shrink: 0;
+  transform: translateY(2px);
+}
+
+.flow-store .store-section-title {
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--store-ink);
+}
+
+.flow-store .store-section-sub {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--store-faint);
+}
+
+/* ---- 纸感商品卡 ---- */
+.flow-store .store-tile {
+  background: var(--store-surface);
+  border: 1px solid var(--store-line);
+  border-radius: 10px;
+  overflow: hidden;
+  height: 100%;
+  transition:
+    border-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.flow-store .store-tile:hover {
+  border-color: var(--store-ink);
+  box-shadow: 0 1px 0 0 var(--store-ink), 0 12px 28px -20px rgba(11, 31, 58, 0.5);
+}
+
+/* 图片区：底色略深，让白底商品图有边界 */
+.flow-store .store-tile-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: linear-gradient(180deg, #f4f6f9 0%, #eef1f6 100%);
+}
+
+.flow-store .store-tile-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.flow-store .store-tile:hover .store-tile-media img {
+  transform: scale(1.02);
+}
+
+/* ---- 折扣标：安静的标签，不是爆炸贴 ---- */
+.flow-store .store-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.4375rem;
+  border-radius: 4px;
+  background: var(--store-surface);
+  border: 1px solid var(--store-line-strong);
+  color: var(--store-ink);
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.flow-store .store-tag-solid {
+  background: var(--store-ink);
+  border-color: var(--store-ink);
+  color: #fff;
+}
+
+/* ---- 收藏按钮：hover 才明显，不抢商品图 ---- */
+.flow-store .store-fav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid transparent;
+  backdrop-filter: blur(6px);
+  color: var(--store-faint);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 180ms ease, transform 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+/* 触屏没有 hover：直接常显，否则收藏功能形同不存在 */
+@media (hover: none) {
+  .flow-store .store-fav { opacity: 1; transform: none; }
+}
+
+.flow-store .store-tile:hover .store-fav,
+.flow-store .store-fav:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.flow-store .store-fav:hover {
+  border-color: var(--store-line-strong);
+  color: var(--store-ink);
+}
+
+.flow-store .store-fav[aria-pressed='true'] {
+  opacity: 1;
+  transform: none;
+  color: #d92d20;
+}
+
+/* ---- 分类 chip：从圆角胶囊改为方括号式标签，更像买手店目录 ---- */
+.flow-store .store-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4375rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--store-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.flow-store .store-chip:hover {
+  color: var(--store-ink);
+  background: var(--store-surface);
+  border-color: var(--store-line-strong);
+}
+
+.flow-store .store-chip-active {
+  color: var(--store-ink);
+  background: var(--store-surface);
+  border-color: var(--store-ink);
+  font-weight: 500;
+}
+
+/* ---- 分区之间的细分隔线：替代大面积背景色切换 ---- */
+.flow-store .store-hairline {
+  height: 1px;
+  background: var(--store-line);
+}

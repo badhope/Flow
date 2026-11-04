@@ -5,7 +5,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import ShopperWidget from './ShopperWidget';
 import { ShoppingCart, Store, Globe, Search, User, LogOut, Heart, ChevronDown, Menu, MapPin } from 'lucide-react';
 import logoHorizontal from '@/assets/branding/logo-horizontal.png';
-import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -85,7 +84,7 @@ const BuyerLayout: React.FC = () => {
 
   return (
     <div className="flow-store min-h-screen flex flex-col">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+      <header className="sticky top-0 z-50 border-b border-[var(--store-line)] bg-white/85 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
             <div className="flex items-center gap-3 md:gap-8">
@@ -103,13 +102,13 @@ const BuyerLayout: React.FC = () => {
                   </SheetHeader>
                   <div className="flex flex-col gap-1 p-3">
                     <form onSubmit={(e) => { handleSearch(e); setMobileNavOpen(false); }} className="relative mb-2">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--store-faint)]" />
                       <Input
                         type="text"
                         placeholder={t.nav.searchPlaceholder}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 pr-4 w-full bg-slate-50 border-slate-200"
+                        className="w-full border-[var(--store-line)] bg-[var(--store-surface-2)] pl-9 pr-4 focus-visible:border-[var(--store-ink)] focus-visible:ring-1 focus-visible:ring-[var(--store-ink)]/20"
                       />
                     </form>
                     <NavLink
@@ -189,34 +188,43 @@ const BuyerLayout: React.FC = () => {
                   className="h-8 w-auto max-w-[130px] object-contain sm:h-9 sm:max-w-none"
                 />
               </Link>
-              <nav className="hidden md:flex items-center gap-6 py-2">
-                <NavLink
-                  to="/"
-                  end
-                  className={({ isActive }) =>
-                    `inline-flex items-center py-1.5 text-sm font-medium transition-colors ${
-                      isActive ? 'text-[var(--flow-ink)]' : 'text-slate-600 hover:text-[var(--flow-ink)]'
-                    }`
-                  }
-                >
-                  {t.nav.home}
-                </NavLink>
-                <NavLink
-                  to="/products"
-                  className={({ isActive }) =>
-                    `inline-flex items-center py-1.5 text-sm font-medium transition-colors ${
-                      isActive ? 'text-[var(--flow-ink)]' : 'text-slate-600 hover:text-[var(--flow-ink)]'
-                    }`
-                  }
-                >
-                  {t.nav.products}
-                </NavLink>
+              <nav className="hidden items-center gap-1 py-2 md:flex">
+                {[
+                  { to: '/', label: t.nav.home, end: true },
+                  { to: '/products', label: t.nav.products, end: false },
+                ].map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      `relative inline-flex items-center px-3 py-1.5 text-sm transition-colors ${
+                        isActive
+                          ? 'font-medium text-[var(--store-ink)]'
+                          : 'text-[var(--store-muted)] hover:text-[var(--store-ink)]'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {item.label}
+                        {/* 当前页用 2px 下划线标记，比单纯变色更明确 */}
+                        <span
+                          aria-hidden="true"
+                          className={`absolute inset-x-3 -bottom-0.5 h-0.5 rounded-full bg-[var(--store-ink)] transition-opacity ${
+                            isActive ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        />
+                      </>
+                    )}
+                  </NavLink>
+                ))}
               </nav>
             </div>
 
             <div className="flex-1 max-w-md hidden sm:block relative">
               <form onSubmit={handleSearch} className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--store-faint)]" />
                 <Input
                   type="text"
                   placeholder={t.nav.searchPlaceholder}
@@ -224,20 +232,20 @@ const BuyerLayout: React.FC = () => {
                   onChange={(e) => handleSearchInput(e.target.value)}
                   onFocus={() => suggestions.length > 0 && setSuggestOpen(true)}
                   onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
-                  className="pl-9 pr-4 w-full bg-slate-50 border-slate-200"
+                  className="w-full border-[var(--store-line)] bg-[var(--store-surface-2)] pl-9 pr-4 focus-visible:border-[var(--store-ink)] focus-visible:ring-1 focus-visible:ring-[var(--store-ink)]/20"
                   autoComplete="off"
                 />
               </form>
               {suggestOpen && suggestions.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+                <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-[var(--store-line-strong)] bg-white shadow-[0_16px_40px_-24px_rgba(11,31,58,0.45)]">
                   {suggestions.map((product) => (
                     <button
                       key={product.id}
                       type="button"
                       onMouseDown={() => selectSuggestion(product)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-slate-50"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-[var(--store-surface-2)]"
                     >
-                      <span className="flex size-9 items-center justify-center overflow-hidden rounded bg-slate-100">
+                      <span className="flex size-9 items-center justify-center overflow-hidden rounded border border-[var(--store-line)] bg-[var(--store-surface-2)]">
                         {product.coverImage ? (
                           <img src={product.coverImage} alt="" className="size-full object-cover" loading="lazy" />
                         ) : (
@@ -245,10 +253,10 @@ const BuyerLayout: React.FC = () => {
                         )}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-slate-800">
+                        <span className="block truncate text-sm text-[var(--store-text)]">
                           {language === 'zh' ? product.titleZh : product.titleEn}
                         </span>
-                        <span className="block text-xs text-slate-500">${product.minPrice ?? '0.00'}</span>
+                        <span className="store-num block text-xs text-[var(--store-faint)]">${product.minPrice ?? '0.00'}</span>
                       </span>
                     </button>
                   ))}
@@ -256,7 +264,7 @@ const BuyerLayout: React.FC = () => {
               )}
             </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-0.5 sm:gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -264,11 +272,12 @@ const BuyerLayout: React.FC = () => {
                       size="sm"
                       className="flex items-center gap-1"
                     >
-                      <Globe className="w-4 h-4" />
-                      <span className="max-w-[80px] truncate">
+                      <Globe className="size-4 shrink-0" aria-hidden="true" />
+                      {/* 移动端只留图标：语言名 + 箭头约占 90px，是头部横向溢出的主要来源 */}
+                      <span className="hidden max-w-[80px] truncate sm:inline">
                         {languageLabels[language]}
                       </span>
-                      <ChevronDown className="w-3 h-3" />
+                      <ChevronDown className="hidden size-3 sm:block" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
@@ -283,7 +292,7 @@ const BuyerLayout: React.FC = () => {
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Link to="/favorites">
+                <Link to="/favorites" className="hidden sm:block">
                   <Button variant="ghost" size="sm" className="relative" title={t.nav.favorites}>
                     <Heart className="w-5 h-5" />
                   </Button>
@@ -357,12 +366,17 @@ const BuyerLayout: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Image
-                  src={logoWhite}
-                  alt="Flow"
-                  className="h-8 w-auto object-contain"
-                />
+              <div className="mb-4 flex items-center gap-2.5">
+                {/*
+                  页脚只保留文字字标，不再贴位图 logo。
+                  原因：现有的 logo PNG 全是「深色底 + 白字」的不透明位图（colortype 2，无 alpha），
+                  放在同色深蓝页脚上，图片边界就是一个灰块——发布截图里已经出现过。
+                  在 96×32 这个尺寸下，位图既看不清细节又会随底色失效；
+                  纯文字字标在任何背景上都稳定，也更符合"克制"的品牌基调。
+                */}
+                <span className="text-[0.9375rem] font-semibold tracking-tight text-white">
+                  Flow AI
+                </span>
               </div>
                <p className="text-sm">
                  {language === 'zh'

@@ -224,7 +224,7 @@ const OrdersPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
@@ -232,7 +232,7 @@ const OrdersPage: React.FC = () => {
 
   if (orders.length === 0) {
     return (
-      <div className="flow-store min-h-screen">
+      <div className="flow-store">
         <div className="container mx-auto px-6 py-6">
           <h1 className="text-2xl font-bold text-slate-900 mb-6">
             {t.orders.title}
@@ -254,7 +254,7 @@ const OrdersPage: React.FC = () => {
   }
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <h1 className="text-2xl font-bold text-slate-900 mb-6">
           {t.orders.title}
@@ -292,7 +292,7 @@ const OrdersPage: React.FC = () => {
                       <span className="text-slate-500">
                         {t.orders.amount}
                       </span>
-                      <span className="font-semibold text-orange-500">
+                      <span className="store-price font-semibold">
                         ${Number(order.totalAmount).toFixed(2)}
                       </span>
                     </div>
@@ -554,7 +554,7 @@ const OrdersPage: React.FC = () => {
                     <span className="text-slate-500 text-sm">
                       {t.cart.total}
                     </span>
-                    <span className="text-xl font-bold text-orange-500">
+                    <span className="store-price text-xl font-bold">
                       ${Number(selectedOrder.totalAmount).toFixed(2)}
                     </span>
                   </div>

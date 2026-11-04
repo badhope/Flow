@@ -189,42 +189,39 @@ const ProductListPage: React.FC = () => {
   const totalPages: number = Math.ceil(total / pageSize);
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar Filter */}
-          <aside className="w-full lg:w-64 flex-shrink-0">
+          <aside className="w-full shrink-0 self-start lg:sticky lg:top-20 lg:w-64">
             <div className="store-card p-4 space-y-6">
               <div>
-                <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <SlidersHorizontal className="size-4" />
+                <h3 className="mb-2.5 flex items-center gap-2 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-[var(--store-faint)]">
+                  <SlidersHorizontal className="size-3" aria-hidden="true" />
                   {t.common.allCategories}
                 </h3>
-                <div className="space-y-1">
-                  <button
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                      !categoryId
-                        ? 'store-filter-active'
-                        : 'text-[var(--store-muted)] hover:bg-[var(--store-surface-2)]'
-                    }`}
-                    onClick={() => handleCategoryChange('')}
-                  >
-                    {t.common.allCategories}
-                  </button>
-                  {categories.map((cat: Category) => {
-                    const name: string =
-                      language === 'zh' ? cat.nameZh : cat.nameEn;
+                <div className="space-y-0.5">
+                  {/* 选中态统一走 store-filter-active：
+                      之前「全部分类」和具体分类用了两套配色（墨色左条 vs 蓝底），
+                      同一组单选项出现两种选中样式，是明显的不一致。 */}
+                  {[{ id: '', name: t.common.allCategories }, ...categories.map((c: Category) => ({
+                    id: c.id,
+                    name: language === 'zh' ? c.nameZh : c.nameEn,
+                  }))].map((item) => {
+                    const active = categoryId === item.id;
                     return (
                       <button
-                        key={cat.id}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                          categoryId === cat.id
-                            ? 'bg-blue-50 text-blue-600 font-medium'
-                            : 'text-slate-600 hover:bg-slate-50'
+                        key={item.id || 'all'}
+                        type="button"
+                        aria-pressed={active}
+                        className={`w-full rounded-md py-1.5 pl-3 pr-2 text-left text-sm transition-colors ${
+                          active
+                            ? 'store-filter-active'
+                            : 'text-[var(--store-muted)] hover:bg-[var(--store-surface-2)] hover:text-[var(--store-ink)]'
                         }`}
-                        onClick={() => handleCategoryChange(cat.id)}
+                        onClick={() => handleCategoryChange(item.id)}
                       >
-                        {name}
+                        {item.name}
                       </button>
                     );
                   })}
@@ -232,7 +229,7 @@ const ProductListPage: React.FC = () => {
               </div>
 
               <div className="border-t pt-4">
-                <h3 className="font-semibold text-slate-900 mb-3">
+                <h3 className="mb-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-[var(--store-faint)]">
                   {t.common.priceRange}
                 </h3>
                 <div className="space-y-2">
@@ -272,12 +269,13 @@ const ProductListPage: React.FC = () => {
           {/* Main Content */}
           <main className="flex-1 min-w-0">
             {/* Search & Sort */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+            <div className="mb-5 flex flex-col gap-2.5 sm:flex-row">
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--store-faint)]" aria-hidden="true" />
                 <Input
-                  className="pl-10"
+                  className="border-[var(--store-line)] bg-white pl-9 focus-visible:border-[var(--store-ink)] focus-visible:ring-1 focus-visible:ring-[var(--store-ink)]/20"
                   placeholder={t.nav.searchPlaceholder}
+                  aria-label={t.nav.searchPlaceholder}
                   value={searchInput}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setSearchInput(e.target.value)
@@ -288,11 +286,14 @@ const ProductListPage: React.FC = () => {
                 />
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleSearch} variant="secondary">
+                <Button
+                  onClick={handleSearch}
+                  className="bg-[var(--store-ink)] text-white hover:bg-[var(--store-ink)]/90"
+                >
                   {t.common.search}
                 </Button>
                 <Select value={sortBy} onValueChange={handleSortChange}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-[160px] border-[var(--store-line)] bg-white">
                     <SelectValue placeholder={t.common.sortBy} />
                   </SelectTrigger>
                   <SelectContent>
@@ -311,22 +312,28 @@ const ProductListPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Results count */}
-            <div className="text-sm text-slate-500 mb-4">
-              {total} {t.common.results}
+            {/* Results count：数字用等宽，右侧留白对齐卡片网格 */}
+            <div className="mb-4 flex items-baseline gap-2 border-b border-[var(--store-line)] pb-2.5">
+              <span className="store-num text-sm font-medium text-[var(--store-ink)]">{total}</span>
+              <span className="text-xs text-[var(--store-faint)]">{t.common.results}</span>
+              {searchInput.trim() && (
+                <span className="ml-auto truncate text-xs text-[var(--store-faint)]">
+                  “{searchInput.trim()}”
+                </span>
+              )}
             </div>
 
             {/* Product Grid */}
             {loading ? (
               <div className="flex flex-col gap-3">
                 <div className="h-6 w-32 rounded-md bg-[var(--store-surface-2)]" />
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="store-card overflow-hidden">
+                    <div key={i} className="overflow-hidden rounded-[10px] border border-[var(--store-line)] bg-white">
                       <div className="aspect-square animate-pulse bg-[var(--store-surface-2)]" />
                       <div className="space-y-2 p-3">
-                        <div className="h-3 w-3/4 rounded bg-[var(--store-surface-2)]" />
-                        <div className="h-3 w-1/3 rounded bg-[var(--store-surface-2)]" />
+                        <div className="h-3 w-3/4 animate-pulse rounded bg-[var(--store-surface-2)]" />
+                        <div className="h-3 w-1/3 animate-pulse rounded bg-[var(--store-surface-2)]" />
                       </div>
                     </div>
                   ))}
@@ -341,7 +348,7 @@ const ProductListPage: React.FC = () => {
                 <a href="/" className="store-btn-primary mt-4">回首页用 AI 找</a>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
                  {products.map((product: Product) => (
                    <ProductCard
                      key={product.id}

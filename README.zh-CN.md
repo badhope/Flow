@@ -10,7 +10,7 @@
 
 从开店、上架、成交、履约、客服到复盘，整条运营闭环都在这里。
 
-[![Version](https://img.shields.io/badge/version-v1.24.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.25.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -86,7 +86,22 @@
 | 出站请求 | webhook、通知地址、LLM Base URL 统一拒绝环回 / 私网 / CGNAT / 链路本地 / 云元数据，并绑定 DNS 解析结果、不跟随重定向 |
 | 上架门禁 | 六项完整性校验（图片、库存、文案、类目、价格、规格）全部通过才允许上架 |
 
-### 4. Agent 能接进来——但只能读
+### 4. 同一套视觉语言，两种界面
+
+买家端不是"换个颜色的通用商模板"，而是按**「可信赖的 AI 买手店」**设计的：
+
+| 决策 | 长什么样 | 为什么 |
+|---|---|---|
+| 价格是事实，不是刺激 | 品牌墨蓝 + 等宽数字（不用促销橙） | Flow 帮你挑，不靠打折逼单 |
+| 编辑式分区标题 | `01 — 热销商品`、一条细竖线、一句主张 | 图标+粗体是模板标配，读者会自动忽略 |
+| 纸感卡片 | 1px 描边、近白底、hover 转墨色描边 | 同等面积下噪音更低、信息密度更高 |
+| 安静的折扣标 | 细描边小标签，不是爆炸贴 | 真正的便宜不需要喊 |
+
+卖家工作台保持深色 + 电光酸橙：高密度、键盘驱动、适合长时间盯屏。同一套 token，两种模态。
+
+---
+
+### 5. Agent 能接进来——但只能读
 
 Flow 通过 **MCP（Model Context Protocol）** 的 Streamable HTTP 传输在 `POST /api/mcp` 暴露能力，并在 `/.well-known/agent-card.json` 提供 A2A 风格的 Agent Card。Claude、Cursor 或任何 MCP 客户端都能直接连上店铺查真实数据。
 
@@ -288,7 +303,7 @@ Flow 刻意选择「单进程 + REST」，优先保证交易正确性与租户�
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | **v1.24.0** |
+| 当前版本 | **v1.25.0** |
 | 状态 | 功能闭环，维护模式：修 bug、打安全补丁、升级依赖 |
 | CI | GitHub Actions 执行 lint、typecheck、单测+覆盖率、生产依赖审计、构建、六套 Postgres E2E |
 | 测试 | 349 / 349（52 文件） |

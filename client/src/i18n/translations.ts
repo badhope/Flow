@@ -21,6 +21,9 @@ export interface Translations {
     categories: string;
     viewAll: string;
     featuredCollection: string;
+    hotSubtitle: string;
+    newSubtitle: string;
+    recentSubtitle: string;
   };
   product: {
     addToCart: string;
@@ -309,6 +312,10 @@ export const translations: Record<Language, Translations> = {
       categories: '商品分类',
       viewAll: '查看全部',
       featuredCollection: '精选集合',
+      // 分区副标题：给每个分区一句「为什么值得看」，而不是只给标题
+      hotSubtitle: '按近 30 天真实成交排序，不含广告位',
+      newSubtitle: '本周上新，先看再决定',
+      recentSubtitle: '你最近打开过的商品',
     },
     product: {
       addToCart: '加入购物车',
@@ -592,6 +599,9 @@ export const translations: Record<Language, Translations> = {
       shopNow: 'Shop Now',
       hotProducts: 'Hot Products',
       newArrivals: 'New Arrivals',
+      hotSubtitle: 'Ranked by real sales in the last 30 days — no paid placement',
+      newSubtitle: 'Added this week, take your time',
+      recentSubtitle: 'Products you opened recently',
       categories: 'Categories',
       viewAll: 'View All',
       featuredCollection: 'Featured Collection',
@@ -879,6 +889,9 @@ export const translations: Record<Language, Translations> = {
         'Productos premium seleccionados, entregados en todo el mundo',
       shopNow: 'Comprar Ahora',
       hotProducts: 'Productos Destacados',
+      hotSubtitle: 'Ordenado por ventas reales de los últimos 30 días',
+      newSubtitle: 'Añadidos esta semana',
+      recentSubtitle: 'Productos que abriste recientemente',
       newArrivals: 'Novedades',
       categories: 'Categorías',
       viewAll: 'Ver Todo',
@@ -1169,6 +1182,9 @@ export const translations: Record<Language, Translations> = {
         'Produtos premium selecionados, entregues em todo o mundo',
       shopNow: 'Comprar Agora',
       hotProducts: 'Produtos em Destaque',
+      hotSubtitle: 'Ordenado por vendas reais nos últimos 30 dias',
+      newSubtitle: 'Adicionados esta semana',
+      recentSubtitle: 'Produtos que você abriu recentemente',
       newArrivals: 'Novidades',
       categories: 'Categorias',
       viewAll: 'Ver Tudo',

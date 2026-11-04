@@ -381,14 +381,14 @@ const CheckoutPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen flex items-center justify-center text-slate-500">
+      <div className="flow-store flex min-h-[50vh] items-center justify-center text-slate-500">
         {t.common.loading}
       </div>
     );
   }
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <Button
           variant="ghost"
@@ -840,7 +840,7 @@ const CheckoutPage: React.FC = () => {
                   )}
                   <div className="flex justify-between font-semibold text-slate-900 text-base pt-2 border-t">
                     <span>{appliedCouponCode ? t.cart.finalTotal : t.cart.total}</span>
-                    <span className="text-lg text-orange-500">
+                    <span className="store-price text-lg">
                       ${finalAmount.toFixed(2)}
                     </span>
                   </div>

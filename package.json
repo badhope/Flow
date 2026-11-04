@@ -1,6 +1,6 @@
 {
   "name": "flow",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "description": "AI-native cross-border commerce platform: buyer storefront + seller AI workbench",
   "license": "MIT",
   "private": true,

@@ -188,7 +188,7 @@ const AddressesPage: React.FC = () => {
   }
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       <div className="container mx-auto px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">

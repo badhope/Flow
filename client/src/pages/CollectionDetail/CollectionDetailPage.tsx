@@ -67,7 +67,7 @@ const CollectionDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flow-store min-h-screen">
+      <div className="flow-store">
         <div className="container mx-auto px-6 py-24 text-center text-slate-400">
           {t.common.loading}
         </div>
@@ -77,7 +77,7 @@ const CollectionDetailPage: React.FC = () => {
 
   if (!collection) {
     return (
-      <div className="flow-store min-h-screen">
+      <div className="flow-store">
         <div className="container mx-auto px-6 py-24 text-center">
           <LayoutGrid className="mx-auto mb-4 h-10 w-10 text-slate-300" />
           <p className="mb-6 text-slate-500">
@@ -100,7 +100,7 @@ const CollectionDetailPage: React.FC = () => {
     : collection.descriptionEn ?? collection.descriptionZh;
 
   return (
-    <div className="flow-store min-h-screen">
+    <div className="flow-store">
       {/* Header band */}
       <section className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-sky-400">
         {collection.coverImage && (
