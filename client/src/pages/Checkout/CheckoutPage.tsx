@@ -29,7 +29,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createOrder } from '@/api/orders';
 import { payForOrder, getPaymentConfig } from '@/api/payments';
 import { validateCoupon } from '@/api/coupons';
-import { getShippingQuote } from '@/api/shipping';
+import { getShippingQuote, getTaxQuote } from '@/api/shipping';
+import { COUNTRIES, countryLabel } from '@/data/countries';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { getProductTitle } from '@/utils/product-i18n';
 import type {
@@ -37,6 +45,7 @@ import type {
   CartResponse,
   CreateOrderRequest,
   PaymentProvider,
+  TaxQuote,
 } from '@shared/api.interface';
 import { notifyError } from '@/lib/error-feedback';
 
@@ -59,6 +68,8 @@ const CheckoutPage: React.FC = () => {
   const [couponMessage, setCouponMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
   const [shippingFee, setShippingFee] = useState<number>(0);
+  /** 目的国税额预估（与下单同源，避免结账显示与扣款不一致） */
+  const [taxQuote, setTaxQuote] = useState<TaxQuote | null>(null);
   const [freeShippingApplied, setFreeShippingApplied] = useState<boolean>(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
@@ -275,7 +286,37 @@ const CheckoutPage: React.FC = () => {
   };
 
   const effectiveShippingFee = freeShippingApplied ? 0 : shippingFee;
-  const finalAmount: number = Math.max(0, subtotal + effectiveShippingFee - discountAmount);
+  const taxAmount: number = Number(taxQuote?.total ?? 0);
+  // 税额计入应付总额：不含税的报价低于真实到手成本
+  const finalAmount: number = Math.max(0, subtotal + effectiveShippingFee - discountAmount + taxAmount);
+
+  /**
+   * 税额预估：运费或国家变化时重算。
+   *
+   * 失败时保持 null（按 0 展示）而不是抛错——税额是增值信息，
+   * 不应因为预估接口抖动就阻断结账。真正金额以下单结果为准。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    if (!watchedCountry) {
+      setTaxQuote(null);
+      return () => { cancelled = true; };
+    }
+    void (async () => {
+      try {
+        const q = await getTaxQuote({
+          subtotal,
+          shippingFee: effectiveShippingFee,
+          discountAmount,
+          country: watchedCountry,
+        });
+        if (!cancelled) setTaxQuote(q);
+      } catch {
+        if (!cancelled) setTaxQuote(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [subtotal, effectiveShippingFee, discountAmount, watchedCountry]);
 
   const handleApplyCoupon = async (): Promise<void> => {
     if (!couponCodeInput.trim()) return;
@@ -544,9 +585,25 @@ const CheckoutPage: React.FC = () => {
                       render={({ field }) => (
                         <FormItem className="col-span-2 sm:col-span-1">
                           <FormLabel>{t.checkout.country} *</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
+                          {/*
+                            必须用下拉而不是自由文本：跨境税率按 ISO 国家代码匹配，
+                            "Germany" / "de" / "德国" 三种写法会让税率匹配失败，
+                            结果就是静默零税——买家少付，卖家自己补。
+                          */}
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder={t.checkout.country} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-[280px]">
+                              {COUNTRIES.map((c) => (
+                                <SelectItem key={c.code} value={c.code}>
+                                  {countryLabel(c.code, language)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -836,6 +893,32 @@ const CheckoutPage: React.FC = () => {
                     <div className="flex justify-between text-emerald-600">
                       <span>{t.cart.discount}</span>
                       <span>-${discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {/*
+                    税额必须显式列出：跨境订单的到手价含目的国税，
+                    不展示会让买家以为最终扣款就是上面那几行之和。
+                    未收录国家时显示说明而非 $0.00，避免误导成"免税"。
+                  */}
+                  {taxQuote && (
+                    <div className="flex justify-between text-[var(--store-muted)]">
+                      <span className="inline-flex items-center gap-1">
+                        {language === 'zh' ? '税费（预估）' : 'Tax (est.)'}
+                        {taxQuote.status === 'unknown' && (
+                          <span
+                            className="cursor-help text-[var(--store-faint)]"
+                            title={taxQuote.note}
+                          >⚠</span>
+                        )}
+                      </span>
+                      <span className="store-num">${taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {taxQuote?.deMinimisApplied && (
+                    <div className="text-[11px] leading-relaxed text-[var(--store-faint)]">
+                      {language === 'zh'
+                        ? '货值低于目的国关税起征点，已免征关税'
+                        : 'Below the destination duty threshold — duty waived'}
                     </div>
                   )}
                   <div className="flex justify-between font-semibold text-slate-900 text-base pt-2 border-t">

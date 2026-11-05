@@ -6,6 +6,7 @@ import type {
   UpdateShippingTemplateRequest,
   ShippingCalculateRequest,
   ShippingCalculateResponse,
+  TaxQuote,
 } from '@shared/api.interface';
 
 export type { ShippingRule };
@@ -57,5 +58,26 @@ export async function deleteShippingTemplate(id: string): Promise<void> {
 
 export async function calculateShipping(payload: ShippingCalculateRequest): Promise<ShippingCalculateResponse> {
   const { data } = await http.post<ShippingCalculateResponse>('/api/shipping-templates/calculate', payload);
+  return data;
+}
+
+/**
+ * 结账页税额预估。
+ *
+ * 用服务端同一套规则计算，避免前端自己维护一份税率表——
+ * 那必然与下单时的实际税额漂移，最终表现为「结账显示 X、订单扣 Y」。
+ */
+export async function getTaxQuote(params: {
+  subtotal: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  country?: string;
+}): Promise<TaxQuote> {
+  const qs = new URLSearchParams();
+  qs.set('subtotal', params.subtotal.toFixed(2));
+  if (params.shippingFee !== undefined) qs.set('shippingFee', params.shippingFee.toFixed(2));
+  if (params.discountAmount !== undefined) qs.set('discountAmount', params.discountAmount.toFixed(2));
+  if (params.country) qs.set('country', params.country);
+  const { data } = await http.get<TaxQuote>(`/api/shipping/tax?${qs.toString()}`);
   return data;
 }

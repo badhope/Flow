@@ -1,327 +1,150 @@
 <div align="center">
 
-<img src="client/src/assets/branding/logo-main.png" alt="Flow" width="220" />
+<img src="client/src/assets/branding/logo-main.png" alt="Flow" width="200" />
 
 # Flow
 
-### AI-native cross-border commerce platform
+**跨境电商平台。买家商城 + 卖家 AI 工作台，一套代码。**
 
-**One codebase, two products: a buyer storefront and a seller AI workbench.**
-
-From listing to fulfilment to support to review — the whole operating loop lives here.
-
-[![Version](https://img.shields.io/badge/version-v1.25.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.26.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://img.shields.io/badge/tests-349%20passing-10b981?style=flat-square)](server)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
+[![Tests](https://img.shields.io/badge/tests-370%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
-[**70-second demo**](docs/video/demo.mp4) · [**Screenshots**](docs/screenshots) · [**Architecture**](docs/ARCHITECTURE.md) · [**Deployment**](docs/DEPLOY.md)
-
-**Mirrors**: [GitHub](https://github.com/X33834/Flow) · [Gitee](https://gitee.com/badhope/Flow) · [GitCode](https://gitcode.com/badhope/Flow)
+[**70 秒演示**](docs/video/demo.mp4) · [**截图**](docs/screenshots) · [**架构**](docs/ARCHITECTURE.md) · [**部署**](docs/DEPLOY.md)
 
 </div>
 
-![Flow storefront](docs/screenshots/02-homepage-en.png)
+![Flow 商城](docs/screenshots/02-homepage-en.png)
 
 ---
 
-## What you get
-
-| | Buyer storefront | Seller AI workbench |
-|---|---|---|
-| **Audience** | Overseas shoppers, four UI locales (en / zh / es / pt); product copy is authored in en + zh | Merchants running the store |
-| **Core** | Search, filters, SKU variants, cart, coupons, checkout, tracking, refunds, reviews | Dashboard, catalog, orders, refunds, collections, coupons, CMS, audit, AI |
-| **AI** | Shopping guide that recommends and confirms before adding to cart | Five specialist agents plus a tool-calling copilot with human approval |
-
-**Works without any AI key.** Every non-AI feature runs normally; AI endpoints return an honest "configure a model" error instead of fabricated data.
-
----
-
-## Why Flow is different
-
-Most open-source commerce projects ship either a storefront or an admin panel. Flow ships both on one schema — and treats AI as a first-class part of the operating loop rather than a chat widget.
-
-### 1. A copilot that acts, but never acts alone
-
-Ask it to "clear out low-stock items" and it will query low stock, draft a clearance coupon, and unpublish dead SKUs — bundling the whole sequence into **one approval batch** that executes in order and stops on first failure.
-
-```
-Seller intent (natural language)
-   └─ Agent plans multi-step tool calls
-        ├─ read tools  → query this store's real data
-        └─ write tools → copilot_actions(status = pending)
-              └─ seller approves → existing business services run
-                 (state machine, stock, points, audit all stay consistent)
-```
-
-- **12 tools** across store overview, orders, products, low stock, pending refunds, status transitions, refund approval, publish/unpublish, coupon creation, draft creation, inquiry replies
-- **Strict argument validation** — type, enum, range and length per tool; unknown arguments are rejected, blocking prompt injection and model hallucination
-- **Ownership checks** — read tools are seller-scoped, write tools re-verify ownership before executing, admins keep cross-store access
-- **Full trace** — conversations, tool results, actions and execution outcomes are persisted
-
-### 2. Five real agents, not five buttons
-
-| Agent | Job | Implementation |
-|---|---|---|
-| **Copywriter** | Titles, selling points, long copy, SEO keywords | Enforced JSON output, writes back to multilingual fields |
-| **Support** | Customer service | FAQ policy match + product retrieval + order summary — answers from real data first |
-| **Trend** | Sales analysis | 30-day SQL aggregation + LLM interpretation, reports persisted |
-| **Select** | Product selection | Category + top-20 sellers + stock context → structured recommendations |
-| **Translation** | Localization | Twelve target languages tuned for cross-border listings |
-
-Each runs through a single gateway that normalizes provider differences (reasoning-model token budgets, response field fallbacks, versioned base URLs). Usage is metered per call, per agent.
-
-### 3. Guard rails that are actually enforced
-
-| Boundary | Behaviour |
-|---|---|
-| Tenant isolation | Every seller-facing query is scoped; admins retain cross-store views |
-| Model config | Keys are stored per `userId:` — no seller can read or overwrite another's |
-| Demo payments | Allowed only in `development` / `test`; production returns 403 regardless of flags |
-| Outbound requests | Webhook URLs, notification targets and LLM base URLs reject loopback, private, CGNAT, link-local and metadata addresses, with DNS pinning and no redirect following |
-| Publish gate | Six completeness checks (images, stock, copy, category, price, variants) before a product can go live |
-
-### 4. Two interfaces, one visual language
-
-The storefront is not a generic commerce template in a different colour. It is designed as a **curated AI buyer's shop**:
-
-| Decision | What it looks like | Why |
-|---|---|---|
-| Price is a fact, not a trigger | Ink-navy, tabular figures (no promo orange) | Flow helps you choose, it doesn't pressure you into a sale |
-| Editorial section headers | `01 — Hot products`, a hairline rule, one line of rationale | Icon + bold heading is what every template does, so readers skip it |
-| Paper-feel cards | 1px outline, near-white fill, border turns ink on hover | Lower visual noise, higher information density at the same size |
-| Quiet discount tags | Small outlined label, not a starburst | A real bargain doesn't need to shout |
-
-The seller workbench stays dark with electric-lime accents — dense, keyboard-driven, built for hours of screen time. Same tokens, different modality.
-
----
-
-### 5. Agents can connect — but only to read
-
-Flow speaks **MCP (Model Context Protocol)** over Streamable HTTP at `POST /api/mcp`, plus an A2A-style agent card at `/.well-known/agent-card.json`. Claude, Cursor, or any MCP client can point at a Flow store and query real data.
-
-The capability boundary is deliberate and enforced in code:
-
-| Layer | Exposed to agents | Why |
-|---|---|---|
-| Read tools (`get_store_overview`, `list_orders`, `list_products`, `list_low_stock`, `list_pending_refunds`) | ✅ over MCP | Safe, idempotent, tenant-scoped |
-| Write tools (refund approval, price change, replies) | ❌ MCP returns `-32602` with the reason | Money-moving actions require a human at the approval card |
+## 快速开始
 
 ```bash
-curl -b cookies.txt -X POST http://localhost:3000/api/mcp   -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest'   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-```
-
-Tool schemas are generated from one contract (`copilot-tool-contract.ts`) and feed **four** consumers: the model catalog, the approval UI, the MCP `inputSchema`, and the OpenAPI spec. Adding a tool can no longer drift between them.
-
----
-
-## Durability guarantees
-
-Commerce code fails in boring ways: a double-click, a retried request, a process killed mid-refund. Each path below has an explicit mechanism rather than hope.
-
-| Failure mode | Mechanism |
-|---|---|
-| Double-submitted checkout | `orders.idempotency_key` + partial unique index; the same key returns the same order |
-| Provider timeout during refund | `Idempotency-Key` (Stripe) / `PayPal-Request-Id` sent; refund id + `provider_state` persisted **before** the business transaction |
-| Crash between provider call and DB write | Refund keeps `provider_state = inflight` for reconciliation instead of retrying and double-paying |
-| Approval card left for days | `copilot_actions.expires_at` (24 h); expired actions refuse execution |
-| Process dies mid-approval | `lease_until` + a 60 s reaper marks it failed with an explicit "verify manually" message |
-| Tool semantics change after approval | `policy_snapshot` fingerprint mismatch invalidates the stale approval |
-
----
-
-## Screenshots
-
-### Buyer storefront
-
-| Home (English) | Home (Chinese) |
-|:---:|:---:|
-| ![Home](docs/screenshots/02-homepage-en.png) | ![首页](docs/screenshots/01-homepage-zh.png) |
-| **Product list** | **Product detail** |
-| ![List](docs/screenshots/03-product-list.png) | ![Detail](docs/screenshots/05-product-detail-en.png) |
-| **Cart** | **Checkout** |
-| ![Cart](docs/screenshots/06-cart.png) | ![Checkout](docs/screenshots/07-checkout.png) |
-| **Order tracking** | **Curated floors** |
-| ![Orders](docs/screenshots/08-orders.png) | ![Floors](docs/screenshots/11-collection-floor.png) |
-
-### Seller workbench
-
-| Dashboard | AI copilot |
-|:---:|:---:|
-| ![Dashboard](docs/screenshots/17-seller-dashboard-en.png) | ![Copilot](docs/screenshots/29-seller-copilot-en.png) |
-| **Catalog** | **Orders** |
-| ![Catalog](docs/screenshots/18-seller-products.png) | ![Orders](docs/screenshots/19-seller-orders.png) |
-| **AI center** | **Refunds** |
-| ![AI](docs/screenshots/22-ai-center.png) | ![Refunds](docs/screenshots/20-seller-refunds.png) |
-
-All 31 screenshots live in [`docs/screenshots/`](docs/screenshots). They are regenerated by `npm run capture:all` against a seeded disposable database, so they never drift from the code. The repository social card is rendered by `npm run capture:social`.
-
----
-
-## Quick start
-
-### Docker (recommended)
-
-```bash
-git clone https://github.com/X33834/Flow.git
-cd Flow
-cp .env.example .env          # replace JWT_SECRET and POSTGRES_PASSWORD
+git clone https://github.com/X33834/Flow.git && cd Flow
+cp .env.example .env          # 填 JWT_SECRET 和 POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-- Storefront → <http://localhost:3000/>
-- Seller workbench → <http://localhost:3000/seller/dashboard>
+商城 → <http://localhost:3000> ｜ 卖家工作台 → <http://localhost:3000/seller/dashboard>
 
-Compose forces `NODE_ENV=production`; demo seeding is refused there. Use the local workflow below with a throwaway database for demo data.
-
-### Local development
+<details>
+<summary>不用 Docker</summary>
 
 ```bash
-npm ci
-cp .env.example .env   # set DATABASE_URL and JWT_SECRET, NODE_ENV=development
+npm ci && cp .env.example .env   # 设 DATABASE_URL、JWT_SECRET
 npm run db:migrate
-npm run dev            # Vite + NestJS together
+npm run dev                       # Vite + NestJS
 ```
-
-### Run the full test suite
-
-```bash
-npm run lint && npm run type:check && npm test && npm run build
-npm run smoke:all      # six end-to-end suites against a real PostgreSQL
-```
-
-On a machine with a local PostgreSQL (no Docker), point the runner at a disposable database:
-
-```bash
-E2E_DATABASE_URL=postgresql://user:pw@127.0.0.1:5432/flow_e2e_local npm run smoke:all
-```
-
-The runner refuses any database whose name does not contain `e2e`, `smoke` or `test`.
-
-### CLI (integration and operations)
-
-```bash
-FLOW_BASE=http://127.0.0.1:3000 npm run cli -- health
-FLOW_BASE=http://127.0.0.1:3000 npm run cli -- products --limit 5
-FLOW_BASE=http://127.0.0.1:3000 npm run cli -- openapi openapi.json
-```
+</details>
 
 ---
 
-## Configure AI
+## 三个真正的差异点
 
-Set the model in **Seller workbench → AI center → Model settings**. Changes apply immediately, no restart.
+### 1. AI 能动手，但动手前必须问你
 
-| Field | Notes |
-|---|---|
-| Base URL | Any OpenAI-compatible endpoint: DeepSeek, Volcano Ark, OpenAI, Qwen, Zhipu… |
-| API key | Stored in the database only, masked in the UI, never echoed back |
-| Model | e.g. `deepseek-chat`; reasoning models automatically get a larger token budget |
+副驾会真的调用工具：查库存、改状态、批退款、发优惠券。**写操作永不自动执行**，只生成待审批卡片，卖家确认后才走正常业务服务。
 
-Resolution order: **UI settings → `LLM_*` environment variables → unconfigured (honest error)**.
+12 个工具的风险等级由服务端单点声明，前端审批卡、MCP schema、OpenAPI 从同一份契约生成——不存在三处各写一遍导致漂移。
 
-> `npm run mock:providers` is a local stand-in for Stripe, PayPal and the model endpoint. Its signed callbacks prove the wiring, not vendor sandbox compatibility. Real sandbox acceptance steps are in the [deployment guide](docs/DEPLOY.md).
+- 同会话同工具同参数只生成一张卡（幂等键 + 唯一索引）
+- 审批 24 小时过期；进程崩溃留下的 `processing` 由 60 秒看门狗回收
+- 工具定义变更后旧审批自动失效（`policy_snapshot` 指纹）
 
----
+### 2. 跨境的价格是真的算过的
 
-## Engineering
+税不是占位符。`computeTax()` 按目的国规则算 VAT/GST 与关税，**结账页、下单、落库用同一个函数**：
 
-| Dimension | State |
-|---|---|
-| Types | TypeScript strict; client and server share `shared/api.interface.ts` as the single contract |
-| Modules | 26 NestJS modules, 26 controllers, 160 endpoints, 39 tables, 11 SQL migrations |
-| Tests | 349 unit/integration cases across 52 files (money, refunds, shipping, state machines, idempotency, signatures, tenancy, search, SEO, MCP, notifications) |
-| E2E | Six suites: 16-step workflows, no-key degradation, 19-step transactions, 18-step providers, 19-step copilot, 9-step shopper |
-| Browser QA | `npm run qa:journey` walks every buyer and seller route in a real browser and fails on any console error, failed request or missing content |
-| CI | lint → typecheck → unit+coverage → production audit → build → Postgres E2E |
-| Security | HttpOnly cookie JWT, CSRF header check, per-endpoint rate limits, Stripe/PayPal signature verification, tenant isolation, SSRF and replay protection |
-| Observability | Request IDs, global exception redaction, structured errors, AI usage metering |
-| Integrations | OpenAPI 3.1 (`/api/openapi.json`), MCP (`/api/mcp`), Agent Card (`/.well-known/agent-card.json`), `sitemap.xml`, `robots.txt`, `llms.txt` |
+| 市场 | VAT/GST | 关税起征点 | 备注 |
+|---|---|---|---|
+| DE / FR / IT / ES / NL | 19–22% | 150 EUR | EU IOSS，起征点只免关税，VAT 照收 |
+| GB | 20% | £135 | 卖家代征 |
+| JP | 10% | 10,000 JPY | 低值免征关税 |
+| AU / SG / CA | 5–10% | — | 低值商品同样征收 |
 
----
+未收录的国家返回 `status: unknown` 并明确提示「可能产生额外费用」，不会假装免税。税基是否含运费、折扣是否先扣减、起征点按折后货值判定——每条都有测试。
 
-## Architecture
+### 3. 库存不会被悄悄吃掉
 
-```
-┌──────────────────────────── Browser ────────────────────────────┐
-│  React 19 + Vite + Tailwind + shadcn/ui + ECharts                │
-│  Buyer storefront  /            Seller workbench  /seller/*      │
-└───────────────────────┬──────────────────────────────────────────┘
-                        │ HttpOnly JWT cookie · X-Requested-With
-┌───────────────────────▼──────────────────────────────────────────┐
-│ NestJS 12 (Express 5) · ValidationPipe · RolesGuard              │
-│ Auth · Products · Cart · Orders · Payments · Refunds · Coupons   │
-│ Shipping · Collections · CMS · Reviews · Inquiry · Dashboard     │
-│ AI (5 agents + gateway) · Copilot (12 tools + approvals)         │
-│ Shopper guide · SEO · Audit · Health                             │
-└──────────┬──────────────────────────────┬────────────────────────┘
-           │                              │
-   ┌───────▼────────┐           ┌─────────▼──────────────────────┐
-   │ PostgreSQL 16  │           │ OpenAI-compatible LLM endpoint │
-   │ Drizzle ORM    │           │ Stripe · PayPal · 17TRACK      │
-   │ pg_trgm search │           │ Google OAuth                   │
-   └────────────────┘           └────────────────────────────────┘
-```
+下单即锁库存，但未支付订单**不会永久占用**：30 分钟（可配）后自动取消并回补库存与优惠券额度。状态用条件更新抢占，重复扫描不会把库存回补两次。
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the schema, AI gateway, copilot protocol and security model.
+这一条比并发超卖更隐蔽——买家拍下不付款，库存就没了，而且没有任何报错。
 
 ---
 
-## Design trade-offs
+## 其余能力
 
-Flow is deliberately a single deployable process over REST, optimizing for transaction correctness and tenant isolation rather than infrastructure breadth.
-
-| Reference | What we borrowed | What we deliberately skipped |
+| | 买家 | 卖家 |
 |---|---|---|
-| **Medusa / Saleor / Vendure** | Module boundaries, multi-tenancy, composable commerce | No GraphQL rewrite, no heavy container topology |
-| **Shopify Hydrogen** | Storefront SEO, sitemap/robots, performance budgets | No platform lock-in: Vite SPA with server-side SEO injection |
-| **Dify / FastGPT** | Agent configuration UX, usage panels, retrieval-shaped context | No general-purpose agent platform |
-| **Agentic commerce (UCP / ACP / AP2)** | `llms.txt`, machine-readable APIs, narrow capability boundaries | Payment authorization protocols are still immature — ship the read-only discovery layer plus human-approved writes |
+| 交易 | 搜索筛选、SKU 规格、购物车、优惠券、结账、物流、退款、评价 | 看板、商品、订单、退款、优惠券、集合、CMS、审计 |
+| AI | 导购：描述需求 → 推荐真实在售商品 → 确认才加购 | 5 个 Agent（文案/客服/趋势/选品/翻译）+ 审批式副驾 |
+| 接入 | — | MCP 只读端点 + Agent Card，写操作永不开放 |
 
-**Explicitly out of scope**: multi-tenant SaaS billing, a plugin marketplace, a GraphQL rewrite. Each would dilute the approval-based copilot, which is the actual differentiator.
+**没有配 AI Key 也能跑。** 所有非 AI 功能正常，AI 接口返回明确的「未配置模型」，不编造数据。
 
 ---
 
-## Documentation
+## 截图
 
-| Document | Contents |
+| 商城首页 | 商品列表 |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, database tables, AI gateway, copilot protocol, security model |
-| [docs/AI-AGENTS.md](docs/AI-AGENTS.md) | Five agents, custom agents, copilot tools and degradation behaviour |
-| [docs/MCP.md](docs/MCP.md) | Connecting external agents over MCP: endpoint, tools, capability boundary, curl recipes |
-| [docs/DEPLOY.md](docs/DEPLOY.md) | Deployment, secret list, backup and upgrade, troubleshooting |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What shipped, what is next, what is out of scope |
-| [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md) | Current release notes and known limits |
-| [CHANGELOG.md](CHANGELOG.md) | Version history (Keep a Changelog) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution flow and code style |
-| [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting |
+| ![Home](docs/screenshots/02-homepage-en.png) | ![List](docs/screenshots/03-product-list.png) |
+| **商品详情** | **购物车** |
+| ![Detail](docs/screenshots/05-product-detail-en.png) | ![Cart](docs/screenshots/06-cart.png) |
+| **卖家看板** | **AI 副驾** |
+| ![Dashboard](docs/screenshots/17-seller-dashboard-en.png) | ![Copilot](docs/screenshots/29-seller-copilot-en.png) |
+
+全部 31 张在 [`docs/screenshots/`](docs/screenshots)，由 `npm run capture:all` 对真实种子库生成。
 
 ---
 
-## Project status
+## 工程
 
-| Item | Value |
+| 项 | 状态 |
 |---|---|
-| Current version | **v1.25.0** |
-| State | Feature-complete and maintained: bug fixes, security patches, dependency upgrades |
-| CI | GitHub Actions runs lint, typecheck, unit tests with coverage, production audit, build and six Postgres E2E suites |
-| Tests | 349 / 349 across 52 files |
-| Licence | MIT |
+| 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` |
+| 规模 | 26 NestJS 模块 · 160 端点 · 39 表 · 11 迁移 |
+| 测试 | **370 用例 / 54 文件** |
+| E2E | 6 套跑真实 PostgreSQL：工作流、无 Key 降级、交易、渠道、副驾、导购 |
+| 浏览器 QA | 30 条路由，桌面 + 移动，0 console 错误 / 0 失败请求 |
+| CI | lint → typecheck → 单测 → 生产依赖审计 → 构建 → Postgres E2E |
 
 ---
 
-## Contributing
+## 架构
 
-Issues, PRs and documentation fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first.
+```
+React 19 + Vite + Tailwind        NestJS 12 + Drizzle ORM
+├── 买家商城（浅色）        ←→    ├── 交易模块（商品/购物车/订单/支付/退款）
+└── 卖家工作台（深色）      ←→    ├── AI 模块（5 Agent + 副驾 + 审批门禁）
+                                  ├── 跨境税务（VAT / 关税 / 起征点）
+                                  └── MCP 只读服务端 + Agent Card
+                        PostgreSQL 16 · pg_trgm
+```
 
-If Flow is useful to you, a **star** is the best support.
+详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## Licence
+---
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | 分层、数据表、AI 网关、审批协议、安全模型 |
+| [AI-AGENTS](docs/AI-AGENTS.md) | 5 个 Agent、工具清单、降级行为 |
+| [MCP](docs/MCP.md) | 外部 Agent 接入：端点、工具、能力边界、curl 示例 |
+| [DESIGN-SYSTEM](docs/DESIGN-SYSTEM.md) | 双模态设计语言、买家端品牌层 |
+| [DEPLOY](docs/DEPLOY.md) | 部署、密钥清单、备份升级、故障排查 |
+| [CHANGELOG](CHANGELOG.md) | 版本历史 |
+
+---
+
+## License
 
 [MIT](LICENSE) © 2026 Flow

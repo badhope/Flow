@@ -46,7 +46,7 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     info: {
       title: 'Flow — AI-Native Cross-Border Commerce API',
       // 与 package.json 的 version 同步；漂移会让集成方按错误版本对接
-      version: '1.24.0',
+      version: '1.26.0',
       description: [
         'Buyer storefront + seller AI workbench.',
         'All state-changing browser requests require the X-Requested-With: XMLHttpRequest header (CSRF).',

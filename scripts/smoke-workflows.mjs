@@ -159,8 +159,11 @@ try {
       items: [{ productId: uiProduct.body.id, variantId: uiVariantId, quantity: 1 }],
     },
   });
-  assert(uiOrder.body?.totalAmount === '17.50', `界面路径商品应可下单（12.50 + 5 = 17.50），实际 ${uiOrder.body?.totalAmount}`);
-  ok('界面路径：无变体创建→默认变体自动生成→价格/库存同步→真实下单 17.50（断裂点修复）');
+  // 订单发往 CN：跨境电商零售进口综合税率 9.1%，税基 = 货值 + 运费
+  // (12.50 + 5.00) * 9.1% = 1.59 → 总额 17.50 + 1.59 = 19.09
+  assert(uiOrder.body?.totalAmount === '19.09', `界面路径商品应可下单（12.50 + 5 + 税 1.59 = 19.09），实际 ${uiOrder.body?.totalAmount}`);
+  assert(Number(uiOrder.body?.taxAmount) === 1.59, `CN 订单应计 9.1% 跨境税（1.59），实际 ${uiOrder.body?.taxAmount}`);
+  ok('界面路径：无变体创建→默认变体自动生成→价格/库存同步→真实下单 19.09（含 1.59 跨境税）');
 
   // ---------- CSV 批量导入 ----------
   const csv = [
@@ -246,7 +249,8 @@ try {
       items: [{ productId: product.id, variantId, quantity: 1 }],
     },
   });
-  assert(order.body?.totalAmount === '20.00', `订单应为 15 + 5 = 20.00，实际 ${order.body?.totalAmount}`);
+  // CN 订单：(15 + 5) * 9.1% = 1.82 → 20.00 + 1.82 = 21.82
+  assert(order.body?.totalAmount === '21.82', `订单应为 15 + 5 + 税 1.82 = 21.82，实际 ${order.body?.totalAmount}`);
   await api('POST', '/api/payments/pay', { cookie: relogin.cookie, json: { orderId: order.body.id, provider: 'demo' } });
 
   const shipped = await api('PATCH', `/api/orders/${order.body.id}/status`, {

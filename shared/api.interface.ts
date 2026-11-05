@@ -274,6 +274,23 @@ export interface Order {
   updatedAt: string;
 }
 
+/** 结账页税额预估（与下单同源，保证前后一致） */
+export interface TaxBreakdownItem {
+  kind: 'duty' | 'vat';
+  base: string;
+  rate: number;
+  amount: string;
+  label: string;
+}
+
+export interface TaxQuote {
+  total: string;
+  breakdown: TaxBreakdownItem[];
+  status: 'known' | 'unknown';
+  deMinimisApplied: boolean;
+  note: string;
+}
+
 export interface CreateOrderRequest {
   buyerName: string;
   buyerEmail?: string;

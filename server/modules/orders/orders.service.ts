@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { ShippingService } from '../shipping/shipping.service';
 import { PaymentsService } from '../payments/payments.service';
 import { computeOrderPricing } from '../../common/pricing/order-pricing';
+import { computeTax } from '../../common/pricing/tax';
 import { canAccessSellerResource, isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
@@ -747,10 +748,23 @@ export class OrdersService {
       ? (await this.couponsService.getCouponByCode(dto.couponCode.trim()))?.type === 'free_shipping'
       : false;
 
+    const effectiveShippingFee = freeShippingCoupon ? 0 : shippingQuote.fee;
+
+    // 跨境税额：按目的国规则计算，写进订单并落库。
+    // 此前 taxAmount 恒为 0（代码注释直说 "税额(=0)"），
+    // 导致跨境订单报价低于真实到手成本——买家结账看到的价格不成立。
+    const taxComputation = computeTax({
+      subtotal: subtotal.toFixed(2),
+      shippingFee: String(effectiveShippingFee),
+      discountAmount: discountAmount.toFixed(2),
+      country: shippingCountry,
+    });
+
     const pricing = computeOrderPricing({
       items: orderItemValues.map((item) => ({ unitPrice: item.unitPrice, quantity: item.quantity })),
-      shippingFee: freeShippingCoupon ? 0 : shippingQuote.fee,
+      shippingFee: effectiveShippingFee,
       discountAmount: discountAmount.toFixed(2),
+      taxAmount: taxComputation.total,
     });
 
     // Build address snapshot
@@ -912,6 +926,109 @@ export class OrdersService {
     return createdOrder;
   }
 
+  /**
+   * 释放订单占用的资源：回补库存、归还优惠券额度、置为已取消。
+   *
+   * 抽成独立方法是因为有两条路径需要完全一致的语义：
+   *   1. 卖家/买家主动取消
+   *   2. 未支付订单超时自动取消（见 releaseExpiredOrders）
+   * 此前两条路径各写一遍极易漂移——只补库存不退券，或反之。
+   *
+   * 用条件更新（status = 'pending_payment'）做幂等锚点：
+   * 并发/重复调用时只有一次能成功，避免库存被回补两次。
+   */
+  private async releaseOrderResources(
+    orderId: string,
+    couponId: string | null,
+    expectedStatus: OrderStatus,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      // 先抢占状态：只有仍处于待付款的订单才允许释放
+      const claimed = await tx
+        .update(orders)
+        .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(orders.id, orderId), eq(orders.status, expectedStatus)))
+        .returning({ id: orders.id });
+
+      if (claimed.length === 0) return false;
+
+      const items = await tx
+        .select({
+          productId: orderItems.productId,
+          variantId: orderItems.variantId,
+          quantity: orderItems.quantity,
+        })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, orderId));
+
+      for (const item of items) {
+        if (!item.variantId) continue;
+        await tx
+          .update(productVariants)
+          .set({
+            // 仅回补库存；销量在下单时未累计（支付入账时才累计）
+            stock: sql`${productVariants.stock} + ${item.quantity}`,
+          })
+          .where(eq(productVariants.id, item.variantId));
+
+        if (item.productId) {
+          await tx
+            .update(products)
+            .set({ totalStock: sql`${products.totalStock} + ${item.quantity}` })
+            .where(eq(products.id, item.productId));
+        }
+      }
+
+      if (couponId) {
+        await tx
+          .update(coupons)
+          .set({ usedCount: sql`GREATEST(${coupons.usedCount} - 1, 0)` })
+          .where(eq(coupons.id, couponId));
+      }
+
+      return true;
+    });
+  }
+
+  /**
+   * 释放超时未支付的订单。
+   *
+   * 为什么必须有：下单即锁库存，但未支付订单此前**永不过期**。
+   * 买家拍下不付款，库存就被永久占用，其他买家买不到——
+   * 这是电商最常见的"隐性超卖"，比并发超卖更隐蔽。
+   *
+   * 默认 30 分钟（可通过 ORDER_PAYMENT_TIMEOUT_MINUTES 调整）。
+   * 返回实际释放的订单号，便于审计与巡检上报。
+   */
+  async releaseExpiredOrders(limit = 100): Promise<{ released: string[]; scanned: number }> {
+    const timeoutMinutes = Number(process.env.ORDER_PAYMENT_TIMEOUT_MINUTES ?? 30);
+    const minutes = Number.isFinite(timeoutMinutes) && timeoutMinutes > 0 ? timeoutMinutes : 30;
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+
+    const expired = await this.db
+      .select({ id: orders.id, orderNo: orders.orderNo, couponId: orders.couponId })
+      .from(orders)
+      .where(and(eq(orders.status, 'pending_payment'), lt(orders.createdAt, cutoff)))
+      .limit(limit);
+
+    const released: string[] = [];
+    for (const row of expired) {
+      try {
+        const ok = await this.releaseOrderResources(row.id, row.couponId, 'pending_payment');
+        if (ok) {
+          released.push(row.orderNo);
+          this.logger.log(`未支付订单超时释放：${row.orderNo}（库存与优惠券已回补）`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `释放超时订单失败 ${row.orderNo}：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return { released, scanned: expired.length };
+  }
+
   async updateStatus(
     id: string,
     dto: OrderStatusUpdateRequest,
@@ -944,50 +1061,7 @@ export class OrdersService {
         throw new BadRequestException('仅待付款订单可取消');
       }
 
-      await this.db.transaction(async (tx) => {
-        const items = await tx
-          .select({
-            productId: orderItems.productId,
-            variantId: orderItems.variantId,
-            quantity: orderItems.quantity,
-          })
-          .from(orderItems)
-          .where(eq(orderItems.orderId, id));
-
-        for (const item of items) {
-          if (item.variantId) {
-            await tx
-              .update(productVariants)
-              .set({
-                // 仅回补库存；销量在下单时未累计（支付入账时才累计）
-                stock: sql`${productVariants.stock} + ${item.quantity}`,
-              })
-              .where(eq(productVariants.id, item.variantId));
-
-            // Also update product-level aggregates
-            if (item.productId) {
-              await tx
-                .update(products)
-                .set({
-                  totalStock: sql`${products.totalStock} + ${item.quantity}`,
-                })
-                .where(eq(products.id, item.productId));
-            }
-          }
-        }
-
-        if (currentOrder.couponId) {
-          await tx
-            .update(coupons)
-            .set({ usedCount: sql`GREATEST(${coupons.usedCount} - 1, 0)` })
-            .where(eq(coupons.id, currentOrder.couponId));
-        }
-
-        await tx
-          .update(orders)
-          .set({ status: 'cancelled', cancelledAt: new Date() })
-          .where(eq(orders.id, id));
-      });
+      await this.releaseOrderResources(id, currentOrder.couponId, currentStatus);
 
       const updatedOrder = await this.getOrderDetail(id, undefined, undefined, { role: 'admin' });
 
