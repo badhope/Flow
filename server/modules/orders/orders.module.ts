@@ -7,9 +7,11 @@ import { CouponsModule } from '../coupons/coupons.module';
 import { AuditModule } from '../audit/audit.module';
 import { ShippingModule } from '../shipping/shipping.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { FxModule } from '../fx/fx.module';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
-  imports: [CouponsModule, AuditModule, ShippingModule, PaymentsModule],
+  imports: [CouponsModule, AuditModule, ShippingModule, PaymentsModule, FxModule, InventoryModule],
   controllers: [OrdersController],
   providers: [OrdersService, OrderExpiryService],
   exports: [OrdersService],

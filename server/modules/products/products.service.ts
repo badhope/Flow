@@ -100,6 +100,10 @@ export class ProductsService {
       optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
       bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
       weight: row.weight ? String(row.weight) : undefined,
+      hsCode: row.hsCode ?? undefined,
+      originCountry: row.originCountry ?? undefined,
+      customsNameEn: row.customsNameEn ?? undefined,
+      customsMaterialEn: row.customsMaterialEn ?? undefined,
       avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
       reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
       createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
@@ -232,6 +236,10 @@ export class ProductsService {
         optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
         bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
         weight: row.weight ? String(row.weight) : undefined,
+      hsCode: row.hsCode ?? undefined,
+      originCountry: row.originCountry ?? undefined,
+      customsNameEn: row.customsNameEn ?? undefined,
+      customsMaterialEn: row.customsMaterialEn ?? undefined,
         avgRating: row.avgRating != null ? Number(row.avgRating) : undefined,
         reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
         createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
@@ -333,6 +341,10 @@ export class ProductsService {
         optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
         bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
         weight: row.weight ? String(row.weight) : undefined,
+      hsCode: row.hsCode ?? undefined,
+      originCountry: row.originCountry ?? undefined,
+      customsNameEn: row.customsNameEn ?? undefined,
+      customsMaterialEn: row.customsMaterialEn ?? undefined,
         avgRating: row.avgRating != null ? Number(row.avgRating) : 0,
         reviewCount: row.reviewCount != null ? Number(row.reviewCount) : 0,
         createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
@@ -376,6 +388,10 @@ export class ProductsService {
         optionNames: row.optionNames ?? [], seoKeywordsZh: row.seoKeywordsZh ?? '', seoKeywordsEn: row.seoKeywordsEn ?? '',
         bulletPointsZh: row.bulletPointsZh ?? [], bulletPointsEn: row.bulletPointsEn ?? [],
         weight: row.weight ? String(row.weight) : undefined,
+      hsCode: row.hsCode ?? undefined,
+      originCountry: row.originCountry ?? undefined,
+      customsNameEn: row.customsNameEn ?? undefined,
+      customsMaterialEn: row.customsMaterialEn ?? undefined,
         avgRating: row.avgRating != null ? Number(row.avgRating) : 0,
         reviewCount: row.reviewCount != null ? Number(row.reviewCount) : 0,
                 createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
@@ -410,6 +426,11 @@ export class ProductsService {
           bulletPointsZh: input.bulletPointsZh ?? [],
           bulletPointsEn: input.bulletPointsEn ?? [],
           weight: input.weight !== undefined ? String(input.weight) : null,
+          // 跨境清关字段：HS 编码与报关品名，报关单的数据来源
+          hsCode: input.hsCode?.trim() || null,
+          originCountry: input.originCountry?.trim().toUpperCase() || null,
+          customsNameEn: input.customsNameEn?.trim() || null,
+          customsMaterialEn: input.customsMaterialEn?.trim() || null,
           optionNames: input.variants?.length ? this.deriveOptionNames(input.variants) : [],
           totalStock: 0,
           totalSold: 0,
@@ -521,6 +542,11 @@ export class ProductsService {
     if (input.bulletPointsZh !== undefined) patch.bulletPointsZh = input.bulletPointsZh;
     if (input.bulletPointsEn !== undefined) patch.bulletPointsEn = input.bulletPointsEn;
     if (input.weight !== undefined) patch.weight = String(input.weight);
+    // 清关字段：允许显式清空（传空串即置 null），否则卖家无法纠正填错的编码
+    if (input.hsCode !== undefined) patch.hsCode = input.hsCode.trim() || null;
+    if (input.originCountry !== undefined) patch.originCountry = input.originCountry.trim().toUpperCase() || null;
+    if (input.customsNameEn !== undefined) patch.customsNameEn = input.customsNameEn.trim() || null;
+    if (input.customsMaterialEn !== undefined) patch.customsMaterialEn = input.customsMaterialEn.trim() || null;
     // 内部字段：仅 backfillCopy 使用，外部请求经 DTO 白名单已剔除
     const copySource = (input as { copySource?: unknown }).copySource;
     if (copySource === 'ai' || copySource === 'reviewed' || copySource === 'manual') {

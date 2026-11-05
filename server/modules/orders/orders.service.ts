@@ -14,6 +14,8 @@ import { ShippingService } from '../shipping/shipping.service';
 import { PaymentsService } from '../payments/payments.service';
 import { computeOrderPricing } from '../../common/pricing/order-pricing';
 import { computeTax } from '../../common/pricing/tax';
+import { FxService } from '../fx/fx.service';
+import { StockReservationService } from '../inventory/stock-reservation.service';
 import { canAccessSellerResource, isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
@@ -47,6 +49,8 @@ export class OrdersService {
     private readonly auditService: AuditService,
     private readonly shippingService: ShippingService,
     private readonly paymentsService: PaymentsService,
+    private readonly fxService: FxService,
+    private readonly stockReservation: StockReservationService,
   ) {}
 
   private generateOrderNo(): string {
@@ -122,6 +126,9 @@ export class OrdersService {
       discountAmount: string;
       taxAmount: string;
       totalAmount: string;
+      currency: string;
+      exchangeRate: string;
+      baseTotalAmount: string;
       status: string;
       couponId: string | null;
       couponCode: string | null;
@@ -158,6 +165,9 @@ export class OrdersService {
       discountAmount: orderRow.discountAmount as string,
       taxAmount: orderRow.taxAmount as string,
       totalAmount: orderRow.totalAmount as string,
+      currency: orderRow.currency,
+      exchangeRate: orderRow.exchangeRate as string,
+      baseTotalAmount: orderRow.baseTotalAmount as string,
       couponCode: orderRow.couponCode ?? undefined,
       status: orderRow.status as OrderStatus,
       paymentMethod: orderRow.paymentMethod ?? 'demo',
@@ -284,6 +294,9 @@ export class OrdersService {
         discountAmount: row.discountAmount as string,
         taxAmount: row.taxAmount as string,
         totalAmount: row.totalAmount as string,
+        currency: row.currency,
+        exchangeRate: row.exchangeRate as string,
+        baseTotalAmount: row.baseTotalAmount as string,
         status: row.status,
         couponId: row.couponId,
         couponCode: row.couponCode,
@@ -357,6 +370,9 @@ export class OrdersService {
         discountAmount: row.discountAmount as string,
         taxAmount: row.taxAmount as string,
         totalAmount: row.totalAmount as string,
+        currency: row.currency,
+        exchangeRate: row.exchangeRate as string,
+        baseTotalAmount: row.baseTotalAmount as string,
         status: row.status,
         couponId: row.couponId,
         couponCode: row.couponCode,
@@ -466,6 +482,9 @@ export class OrdersService {
         discountAmount: orderRow.discountAmount as string,
         taxAmount: orderRow.taxAmount as string,
         totalAmount: orderRow.totalAmount as string,
+        currency: orderRow.currency,
+        exchangeRate: orderRow.exchangeRate as string,
+        baseTotalAmount: orderRow.baseTotalAmount as string,
         status: orderRow.status,
         couponId: orderRow.couponId,
         couponCode: orderRow.couponCode,
@@ -674,6 +693,16 @@ export class OrdersService {
       }
     }
 
+    // 币种与汇率：下单时快照，后续退款/结算/对账都按这个汇率复算。
+    // 不在读取时现算——汇率每天变，历史订单会因此漂移。
+    const currencyCode = (dto.currency ?? 'USD').trim().toUpperCase();
+    const fxRate = await this.fxService.getRate(currencyCode);
+    if (!fxRate) {
+      throw new BadRequestException(`不支持的结算币种：${currencyCode}`);
+    }
+    // 汇率语义 1 USD = rate 个该币种；价格以 USD 为基准，乘 rate 得到本币价格
+    const fxMultiplier = new Decimal(fxRate.rate);
+
     const orderNo = await this.generateUniqueOrderNo();
 
     let subtotal = new Decimal(0);
@@ -693,7 +722,9 @@ export class OrdersService {
       const product = productMap.get(item.productId)!;
       const entry = itemVariantIds.find((e) => e.index === index);
       const variant = variantMap.get(entry!.variantId)!;
-      const unitPrice = new Decimal(variant.price as string);
+      // 商品价格以 USD 为基准；按快照汇率折算为本单币种
+      const unitPrice = new Decimal(variant.price as string).mul(fxMultiplier)
+        .toDecimalPlaces(fxRate.decimalDigits, Decimal.ROUND_HALF_UP);
       const itemSubtotal = unitPrice.mul(item.quantity);
       subtotal = subtotal.plus(itemSubtotal);
       orderItemValues.push({
@@ -767,6 +798,10 @@ export class OrdersService {
       taxAmount: taxComputation.total,
     });
 
+    // 折算 USD 基准总额：结算与跨币种统计统一用 USD，避免每次查询都做换算
+    const baseTotalUsd = new Decimal(pricing.totalAmount).div(fxMultiplier)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
     // Build address snapshot
     const addressSnapshot: AddressSnapshot = {
       receiverName,
@@ -795,6 +830,9 @@ export class OrdersService {
           discountAmount: pricing.discountAmount,
           taxAmount: pricing.taxAmount,
           totalAmount: pricing.totalAmount,
+          currency: currencyCode,
+          exchangeRate: fxRate.rate.toFixed(8),
+          baseTotalAmount: baseTotalUsd.toFixed(2),
           shippingTemplateId: shippingQuote.templateId,
           status: 'pending_payment',
           paymentMethod: (dto.paymentMethod?.trim() || 'demo') as 'stripe' | 'paypal' | 'demo',
@@ -870,6 +908,28 @@ export class OrdersService {
       } else if (sessionId) {
         await tx.delete(cartItems).where(eq(cartItems.sessionId, sessionId));
       }
+
+      // 记录库存占用：与扣减同事务，保证"扣了库存就一定有对应的占用记录"。
+      // 支付后转 consumed，取消/超时转 released。
+      const reservationExpiry = new Date(
+        Date.now() + Number(process.env.ORDER_PAYMENT_TIMEOUT_MINUTES ?? 30) * 60 * 1000,
+      );
+      await this.stockReservation.reserveSoft(
+        tx as unknown as typeof this.db,
+        {
+          orderId: newOrder.id,
+          orderNo,
+          items: dto.items
+            .map((item, index) => {
+              const entry = itemVariantIds.find((e) => e.index === index);
+              return entry?.variantId
+                ? { variantId: entry.variantId, quantity: item.quantity }
+                : null;
+            })
+            .filter((v): v is { variantId: string; quantity: number } => v !== null),
+          expiresAt: reservationExpiry,
+        },
+      );
 
       return newOrder;
     });
@@ -985,6 +1045,9 @@ export class OrdersService {
           .set({ usedCount: sql`GREATEST(${coupons.usedCount} - 1, 0)` })
           .where(eq(coupons.id, couponId));
       }
+
+      // 预留状态与库存回补必须同事务：否则会留下"库存已回补但预留仍 active"的幽灵占用
+      await this.stockReservation.releaseForOrder(tx as unknown as typeof this.db, orderId);
 
       return true;
     });

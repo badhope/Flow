@@ -31,6 +31,7 @@ import { StripeService } from './stripe.service';
 import { isDemoPaymentAllowed } from './demo-gate';
 import { PayPalService } from './paypal.service';
 import { AuditService } from '../audit/audit.service';
+import { StockReservationService } from '../inventory/stock-reservation.service';
 import { canAccessSellerResource } from '../../common/tenant/tenant-scope';
 
 type MarkPaidProvider = PaymentProvider | 'manual';
@@ -61,6 +62,7 @@ export class PaymentsService {
     private readonly stripeService: StripeService,
     private readonly payPalService: PayPalService,
     private readonly auditService: AuditService,
+    private readonly stockReservation: StockReservationService,
   ) {}
 
   private generateDemoTransactionId(): string {
@@ -182,7 +184,8 @@ export class PaymentsService {
 
       const now = new Date();
       const amount = opts.amount ?? (order.totalAmount as string);
-      const currency = opts.currency ?? 'USD';
+      // 默认沿用订单币种，而不是猜 USD
+      const currency = opts.currency ?? ((order.currency as string) ?? 'USD');
 
       // 渠道预创建的 pending 流水（Stripe intent / PayPal order）就地升级为 paid，
       // 避免支付历史出现 "pending 与 paid 并存"；无 pending 时插入（重复流水由唯一索引兜底）
@@ -267,6 +270,9 @@ export class PaymentsService {
           .where(eq(products.id, item.productId));
       }
 
+      // 支付成功：软预留转 consumed（该占用不再可释放，库存已在成交时扣减）
+      await this.stockReservation.consumeForOrder(orderId);
+
       // 会员积分：1 美元 = 1 分（仅登录用户），退款审批时按金额回滚
       if (order.userId) {
         const points = Math.floor(Number(amount));
@@ -347,7 +353,8 @@ export class PaymentsService {
     }
 
     const amount = Number(order.totalAmount);
-    const currency = 'USD';
+    // 必须用订单自身币种：多币种下单后写死 USD 会让渠道按错误币种收款
+    const currency = (order.currency ?? 'USD').toUpperCase();
 
     if (provider === 'stripe' && this.stripeService.isConfigured()) {
       const { paymentIntentId, clientSecret } = await this.stripeService.createPaymentIntent(

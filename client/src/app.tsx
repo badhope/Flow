@@ -28,6 +28,8 @@ const AICenterPage = lazy(() => import('./pages/seller/AICenterPage'));
 const CopilotPage = lazy(() => import('./pages/seller/CopilotPage'));
 const CouponsPage = lazy(() => import('./pages/seller/CouponsPage/CouponsPage'));
 const RefundsManagePage = lazy(() => import('./pages/seller/RefundsManagePage'));
+const SettlementPage = lazy(() => import('./pages/seller/SettlementPage'));
+const CustomsPage = lazy(() => import('./pages/seller/CustomsPage'));
 const ShippingTemplatesPage = lazy(() => import('./pages/seller/ShippingTemplatesPage'));
 const CollectionsPage = lazy(() => import('./pages/seller/CollectionsPage'));
 const CmsPagesPage = lazy(() => import('./pages/seller/CmsPagesPage'));
@@ -91,6 +93,8 @@ const RoutesComponent = () => {
               <Route path="ai-center" element={<AICenterPage />} />
               <Route path="coupons" element={<CouponsPage />} />
               <Route path="refunds" element={<RefundsManagePage />} />
+              <Route path="settlements" element={<SettlementPage />} />
+              <Route path="customs" element={<CustomsPage />} />
               <Route path="shipping-templates" element={<ShippingTemplatesPage />} />
               <Route path="collections" element={<CollectionsPage />} />
               <Route path="cms-pages" element={<CmsPagesPage />} />

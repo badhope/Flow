@@ -296,6 +296,70 @@ const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
               )}
             />
 
+            {/* 跨境清关：报关单的数据来源。缺 HS 编码时生成的报关单无法申报 */}
+            <div className="rounded-lg border border-dashed p-3">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">
+                跨境清关信息
+                <span className="ml-1.5 font-normal opacity-70">
+                  （生成报关单需要，缺失会导致无法申报）
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="hsCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>HS 编码</FormLabel>
+                      <FormControl>
+                        <Input placeholder="如 392410（6–10 位数字）" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="originCountry"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>原产国</FormLabel>
+                      <FormControl>
+                        <Input placeholder="两位代码，如 CN" maxLength={2} {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="customsNameEn"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>报关品名（英文）</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Plastic food container" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="customsMaterialEn"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>材质（英文）</FormLabel>
+                      <FormControl>
+                        <Input placeholder="PP plastic" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
             {readiness && editingProduct && (
               <div
                 className={`rounded-lg border p-3 text-xs ${

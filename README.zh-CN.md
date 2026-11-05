@@ -6,12 +6,12 @@
 
 **跨境电商平台。买家商城 + 卖家 AI 工作台，一套代码。**
 
-[![Version](https://img.shields.io/badge/version-v1.26.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.27.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Tests](https://img.shields.io/badge/tests-370%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-394%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -70,7 +70,22 @@ npm run dev                       # Vite + NestJS
 
 未收录的国家返回 `status: unknown` 并明确提示「可能产生额外费用」，不会假装免税。税基是否含运费、折扣是否先扣减、起征点按折后货值判定——每条都有测试。
 
-### 3. 库存不会被悄悄吃掉
+### 3. 跨境是一条链路，不是一个标签
+
+四块能力只有在一起才成立：
+
+| | 做什么 |
+|---|---|
+| **多币种** | 汇率从 `open.er-api.com` 实时拉取。下单快照汇率，退款与结算按买家实际支付的汇率复算，不随今日汇率漂移。 |
+| **清关** | 商品级 HS 编码、原产国、报关品名。一单一单据，行项目冻结为快照。申报价值用**实际成交价**，不是标价。 |
+| **库存预留** | 支付后 `soft → consumed`，取消/超时 `released`。能回答「多少库存被未支付订单占着」——旧模型给不出的数字。 |
+| **卖家结算** | 佣金规则、周期结算、逐单明细。费率快照进结算单，改费率不会重写历史。 |
+
+详见 [docs/CROSS-BORDER.md](docs/CROSS-BORDER.md)。
+
+---
+
+### 4. 库存不会被悄悄吃掉
 
 下单即锁库存，但未支付订单**不会永久占用**：30 分钟（可配）后自动取消并回补库存与优惠券额度。状态用条件更新抢占，重复扫描不会把库存回补两次。
 
@@ -109,8 +124,8 @@ npm run dev                       # Vite + NestJS
 | 项 | 状态 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` |
-| 规模 | 26 NestJS 模块 · 160 端点 · 39 表 · 11 迁移 |
-| 测试 | **370 用例 / 54 文件** |
+| 规模 | 30 NestJS 模块 · 175 端点 · 44 表 · 12 迁移 |
+| 测试 | **394 用例 / 56 文件** |
 | E2E | 6 套跑真实 PostgreSQL：工作流、无 Key 降级、交易、渠道、副驾、导购 |
 | 浏览器 QA | 30 条路由，桌面 + 移动，0 console 错误 / 0 失败请求 |
 | CI | lint → typecheck → 单测 → 生产依赖审计 → 构建 → Postgres E2E |
@@ -140,6 +155,7 @@ React 19 + Vite + Tailwind        NestJS 12 + Drizzle ORM
 | [AI-AGENTS](docs/AI-AGENTS.md) | 5 个 Agent、工具清单、降级行为 |
 | [MCP](docs/MCP.md) | 外部 Agent 接入：端点、工具、能力边界、curl 示例 |
 | [DESIGN-SYSTEM](docs/DESIGN-SYSTEM.md) | 双模态设计语言、买家端品牌层 |
+| [CROSS-BORDER](docs/CROSS-BORDER.md) | 多币种、清关单据、库存预留、卖家结算 |
 | [DEPLOY](docs/DEPLOY.md) | 部署、密钥清单、备份升级、故障排查 |
 | [CHANGELOG](CHANGELOG.md) | 版本历史 |
 

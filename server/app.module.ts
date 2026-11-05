@@ -28,6 +28,10 @@ import { SeedModule } from './modules/seed/seed.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { ShopperModule } from './modules/shopper/shopper.module';
 import { McpModule } from './modules/mcp/mcp.module';
+import { FxModule } from './modules/fx/fx.module';
+import { CustomsModule } from './modules/customs/customs.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { SettlementModule } from './modules/settlement/settlement.module';
 import { JwtAuthMiddleware } from './common/middleware/jwt-auth.middleware';
 import { CsrfHeaderMiddleware } from './common/middleware/csrf-header.middleware';
 
@@ -50,6 +54,10 @@ const businessModules = [
   InquiryModule,
   LogisticsModule,
   McpModule,
+  FxModule,
+  CustomsModule,
+  InventoryModule,
+  SettlementModule,
   OrdersModule,
   PaymentsModule,
   ProductsModule,

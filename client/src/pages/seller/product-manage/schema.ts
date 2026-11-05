@@ -28,6 +28,20 @@ export const productSchema = z.object({
   descEn: z.string().optional(),
   longDescZh: z.string().optional(),
   longDescEn: z.string().optional(),
+  // 跨境清关：HS 编码为 6–10 位数字（前 6 位国际统一，后几位各国细分）
+  hsCode: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || /^\d{6,10}$/.test(v.trim()),
+      { message: 'HS 编码应为 6–10 位数字' },
+    ),
+  originCountry: z
+    .string()
+    .max(2, { message: '原产国请使用两位 ISO 代码' })
+    .optional(),
+  customsNameEn: z.string().max(255, { message: '报关品名不能超过 255 字符' }).optional(),
+  customsMaterialEn: z.string().max(255, { message: '材质描述不能超过 255 字符' }).optional(),
 });
 
 export type ProductFormValues = z.infer<typeof productSchema>;
@@ -65,6 +79,10 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   descEn: '',
   longDescZh: '',
   longDescEn: '',
+  hsCode: '',
+  originCountry: '',
+  customsNameEn: '',
+  customsMaterialEn: '',
 };
 
 export const EMPTY_COPYWRITER_FORM: CopywriterFormValues = {
@@ -98,6 +116,10 @@ export function toProductForm(product: {
   descEn?: string | null;
   longDescZh?: string | null;
   longDescEn?: string | null;
+  hsCode?: string | null;
+  originCountry?: string | null;
+  customsNameEn?: string | null;
+  customsMaterialEn?: string | null;
   variants: Array<{ price: string; originalPrice?: string | null }>;
 }): ProductFormValues {
   const firstVariant = product.variants[0];
@@ -114,6 +136,10 @@ export function toProductForm(product: {
     descEn: product.descEn ?? '',
     longDescZh: product.longDescZh ?? '',
     longDescEn: product.longDescEn ?? '',
+    hsCode: product.hsCode ?? '',
+    originCountry: product.originCountry ?? '',
+    customsNameEn: product.customsNameEn ?? '',
+    customsMaterialEn: product.customsMaterialEn ?? '',
   };
 }
 
@@ -132,5 +158,10 @@ export function toProductPayload(values: ProductFormValues) {
     descEn: values.descEn,
     longDescZh: values.longDescZh,
     longDescEn: values.longDescEn,
+    // 清关字段：空串表示清空，服务端会转 null
+    hsCode: values.hsCode?.trim() || undefined,
+    originCountry: values.originCountry?.trim().toUpperCase() || undefined,
+    customsNameEn: values.customsNameEn?.trim() || undefined,
+    customsMaterialEn: values.customsMaterialEn?.trim() || undefined,
   };
 }

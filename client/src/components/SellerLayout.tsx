@@ -17,6 +17,7 @@ import {
   Menu,
   Bot,
   Command,
+  Wallet,
 } from 'lucide-react';
 import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
@@ -88,6 +89,16 @@ const SellerLayout: React.FC = () => {
       to: '/seller/refunds',
       label: zh ? '退款管理' : 'Refunds',
       icon: RotateCcw,
+    },
+    {
+      to: '/seller/settlements',
+      label: zh ? '结算中心' : 'Settlements',
+      icon: Wallet,
+    },
+    {
+      to: '/seller/customs',
+      label: zh ? '清关单据' : 'Customs',
+      icon: FileText,
     },
     {
       to: '/seller/coupons',

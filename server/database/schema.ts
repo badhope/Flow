@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, varchar, text, integer,
-  decimal, timestamp, boolean, pgEnum, uniqueIndex, index,
+  decimal, timestamp, boolean, pgEnum, uniqueIndex, index, jsonb,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -102,6 +102,11 @@ export const products = pgTable('products', {
   totalSold: integer('total_sold').notNull().default(0),
   // 文案来源：manual=卖家手写 / ai=AI 生成待复核 / reviewed=已人工复核
   copySource: varchar('copy_source', { length: 16 }).notNull().default('manual'),
+  // 跨境清关：HS 编码（国际统一商品编码）、原产国、报关品名与材质
+  hsCode: varchar('hs_code', { length: 20 }),
+  originCountry: varchar('origin_country', { length: 2 }),
+  customsNameEn: varchar('customs_name_en', { length: 255 }),
+  customsMaterialEn: varchar('customs_material_en', { length: 255 }),
   updatedBy: uuid('updated_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -268,6 +273,12 @@ export const orders = pgTable('orders', {
   discountAmount: decimal('discount_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   taxAmount: decimal('tax_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  // 多币种：订单币种 + 下单时结算汇率（1 USD = exchange_rate 该币种）
+  // 记录汇率是为了汇率波动后仍能复算历史订单，不能只存金额
+  currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+  exchangeRate: decimal('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+  // 以 USD 计的总额，供跨币种统计与结算使用
+  baseTotalAmount: decimal('base_total_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   // 发票
   invoiceRequested: boolean('invoice_requested').notNull().default(false),
   invoiceTitle: varchar('invoice_title', { length: 255 }),
@@ -383,6 +394,9 @@ export const payments = pgTable('payments', {
   provider: varchar('provider', { length: 30 }),
   currency: varchar('currency', { length: 3 }).notNull().default('USD'),
   amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  // 支付时的结算汇率与折算后的 USD 金额，供对账与结算使用
+  exchangeRate: decimal('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+  baseAmount: decimal('base_amount', { precision: 12, scale: 2 }).notNull().default('0'),
   status: varchar('status', { length: 30 }).notNull().default('pending'),
   transactionId: varchar('transaction_id', { length: 255 }),
   rawResponse: text('raw_response'),
@@ -724,6 +738,123 @@ export const userRelations = relations(users, ({ many }) => ({
 
 export const collectionRelations = relations(collections, ({ many }) => ({
   collectionProducts: many(collectionProducts),
+}));
+
+// ==================== 跨境：多币种 / 清关 / 预留 / 结算 ====================
+
+/**
+ * 币种与汇率。
+ *
+ * `rateToUsd` 语义：1 USD = rateToUsd 个该币种。
+ * 由 `FxService` 定期从公开汇率源刷新（也可手工覆盖），
+ * 订单与支付都记录下单时的汇率快照，保证历史可复算。
+ */
+export const currencies = pgTable('currencies', {
+  code: varchar('code', { length: 3 }).primaryKey(),
+  nameZh: varchar('name_zh', { length: 50 }).notNull().default(''),
+  nameEn: varchar('name_en', { length: 50 }).notNull().default(''),
+  symbol: varchar('symbol', { length: 8 }).notNull().default(''),
+  /** 小数位：JPY/KRW 为 0，其余多为 2 */
+  decimalDigits: integer('decimal_digits').notNull().default(2),
+  rateToUsd: decimal('rate_to_usd', { precision: 18, scale: 8 }).notNull().default('1'),
+  /** builtin=内置初值 / remote=汇率源拉取 / manual=人工设置 */
+  rateSource: varchar('rate_source', { length: 20 }).notNull().default('manual'),
+  rateUpdatedAt: timestamp('rate_updated_at', { withTimezone: true }),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 清关单据：一单一记录，行项目为快照，商品后续改动不影响历史单据 */
+export const customsDeclarations = pgTable('customs_declarations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orderId: uuid('order_id').notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  declarationNo: varchar('declaration_no', { length: 40 }).notNull().unique(),
+  sellerId: uuid('seller_id').references(() => users.id, { onDelete: 'set null' }),
+  /** draft=已生成 / filed=已申报 / cleared=已放行 */
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  destinationCountry: varchar('destination_country', { length: 2 }).notNull().default(''),
+  originCountry: varchar('origin_country', { length: 2 }).notNull().default(''),
+  declaredValue: decimal('declared_value', { precision: 12, scale: 2 }).notNull().default('0'),
+  declaredCurrency: varchar('declared_currency', { length: 3 }).notNull().default('USD'),
+  declaredValueUsd: decimal('declared_value_usd', { precision: 12, scale: 2 }).notNull().default('0'),
+  lineItems: jsonb('line_items').notNull().default(sql`'[]'::jsonb`),
+  note: text('note'),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  filedAt: timestamp('filed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  orderIdx: index('customs_declarations_order_idx').on(t.orderId),
+  sellerIdx: index('customs_declarations_seller_idx').on(t.sellerId),
+}));
+
+/**
+ * 库存预留。
+ *
+ * 与"直接扣减 stock"的区别：这是一条可追踪的占用记录，
+ * 能回答"多少库存被哪个订单占着、什么时候到期"。
+ * soft 在下单时创建，支付成功后转 hard，取消/超时则 released。
+ */
+export const stockReservations = pgTable('stock_reservations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  variantId: uuid('variant_id').notNull().references(() => productVariants.id, { onDelete: 'cascade' }),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'cascade' }),
+  orderNo: varchar('order_no', { length: 32 }),
+  quantity: integer('quantity').notNull(),
+  /** active=占用中 / consumed=已转实际扣减 / released=已释放 */
+  status: varchar('status', { length: 20 }).notNull().default('active'),
+  /** soft=下单软预留 / hard=支付后硬扣减 */
+  kind: varchar('kind', { length: 10 }).notNull().default('soft'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  variantStatusIdx: index('stock_reservations_variant_status_idx').on(t.variantId, t.status),
+  orderIdx: index('stock_reservations_order_idx').on(t.orderId),
+}));
+
+/** 平台抽成规则；sellerId 为 null 表示全局默认 */
+export const commissionRules = pgTable('commission_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sellerId: uuid('seller_id').references(() => users.id, { onDelete: 'cascade' }),
+  /** 百分比，8.000 表示 8% */
+  rate: decimal('rate', { precision: 6, scale: 3 }).notNull().default('8.000'),
+  fixedFee: decimal('fixed_fee', { precision: 10, scale: 2 }).notNull().default('0'),
+  fixedFeeCurrency: varchar('fixed_fee_currency', { length: 3 }).notNull().default('USD'),
+  note: varchar('note', { length: 255 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 结算单：按周期汇总已履约订单，扣除退款与佣金 */
+export const settlements = pgTable('settlements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  settlementNo: varchar('settlement_no', { length: 40 }).notNull().unique(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** pending=待打款 / paid=已打款 / cancelled=已取消 */
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+  grossAmount: decimal('gross_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  refundAmount: decimal('refund_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  commissionAmount: decimal('commission_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  netAmount: decimal('net_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+  orderCount: integer('order_count').notNull().default(0),
+  refundCount: integer('refund_count').notNull().default(0),
+  /** 佣金规则快照：费率调整不影响历史结算单 */
+  commissionRate: decimal('commission_rate', { precision: 6, scale: 3 }).notNull().default('0'),
+  fixedFeeTotal: decimal('fixed_fee_total', { precision: 12, scale: 2 }).notNull().default('0'),
+  lineItems: jsonb('line_items').notNull().default(sql`'[]'::jsonb`),
+  note: text('note'),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sellerStatusIdx: index('settlements_seller_status_idx').on(t.sellerId, t.status),
+  periodIdx: index('settlements_period_idx').on(t.periodStart, t.periodEnd),
 }));
 
 // ==================== Types ====================

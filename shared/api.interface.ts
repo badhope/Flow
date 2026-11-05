@@ -100,6 +100,11 @@ export interface Product {
   seoKeywordsEn: string;
   seoKeywordsEs?: string;
   seoKeywordsPt?: string;
+  /** 跨境清关字段 */
+  hsCode?: string;
+  originCountry?: string;
+  customsNameEn?: string;
+  customsMaterialEn?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -145,6 +150,14 @@ export interface CreateProductRequest {
   bulletPointsZh?: string[];
   bulletPointsEn?: string[];
   weight?: number;
+  /** 跨境清关：HS 编码（6–10 位数字，各国海关通用前 6 位） */
+  hsCode?: string;
+  /** 原产国 ISO 代码，影响关税优惠 */
+  originCountry?: string;
+  /** 报关英文品名（与展示标题分开：报关有格式要求） */
+  customsNameEn?: string;
+  /** 报关材质描述 */
+  customsMaterialEn?: string;
 }
 
 export interface ImportFailure {
@@ -162,6 +175,10 @@ export interface UpdateProductRequest {
   sku?: string;
   titleZh?: string;
   titleEn?: string;
+  hsCode?: string;
+  originCountry?: string;
+  customsNameEn?: string;
+  customsMaterialEn?: string;
   descZh?: string;
   descEn?: string;
   longDescZh?: string;
@@ -259,6 +276,12 @@ export interface Order {
   discountAmount?: string;
   taxAmount?: string;
   totalAmount: string;
+  /** 订单币种 */
+  currency?: string;
+  /** 下单时汇率：1 USD = exchangeRate 该币种 */
+  exchangeRate?: string;
+  /** 折算 USD 总额，供跨币种统计 */
+  baseTotalAmount?: string;
   status: OrderStatus;
   paymentMethod: string;
   couponId?: string;
@@ -308,6 +331,8 @@ export interface CreateOrderRequest {
    * 同一键重复提交只产生一张订单：双击、超时重试、网关重放都安全。
    */
   idempotencyKey?: string;
+  /** 下单币种（ISO 4217）。不传则 USD。服务端按快照汇率折算并落库 */
+  currency?: string;
   items: { productId: string; variantId?: string; quantity: number }[];
 }
 
@@ -1263,4 +1288,108 @@ export interface UpdateAddressRequest {
 export interface AddressListResponse {
   items: Address[];
   total: number;
+}
+
+// ==================== 跨境：多币种 / 清关 / 结算 ====================
+
+export interface FxRateItem {
+  code: string;
+  symbol: string;
+  nameZh: string;
+  nameEn: string;
+  /** 1 USD = rate 个该币种 */
+  rate: number;
+  decimalDigits: number;
+  updatedAt: string | null;
+  /** remote=汇率源拉取 / manual=人工设置 / builtin=内置初值 */
+  source: string;
+}
+
+export interface FxRateList {
+  base: string;
+  rates: FxRateItem[];
+}
+
+export interface FxConversion {
+  from: string;
+  to: string;
+  amount: string;
+  converted: string;
+  rate: number;
+}
+
+export interface CustomsLineItem {
+  sku: string;
+  hsCode: string | null;
+  description: string;
+  quantity: number;
+  unitValue: string;
+  totalValue: string;
+  originCountry: string | null;
+  weightKg: number | null;
+  warnings: string[];
+}
+
+export interface CustomsDeclaration {
+  id: string;
+  declarationNo: string;
+  orderId: string;
+  orderNo: string;
+  status: string;
+  destinationCountry: string;
+  originCountry: string;
+  declaredValue: string;
+  declaredCurrency: string;
+  declaredValueUsd: string;
+  lineItems: CustomsLineItem[];
+  note?: string;
+  generatedAt: string;
+  filedAt?: string;
+  warnings: string[];
+}
+
+export interface SettlementLine {
+  orderNo: string;
+  paidAt: string | null;
+  gross: string;
+  refund: string;
+  commission: string;
+  net: string;
+}
+
+export interface Settlement {
+  id: string;
+  settlementNo: string;
+  sellerId: string;
+  status: 'pending' | 'paid' | 'cancelled' | string;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  grossAmount: string;
+  refundAmount: string;
+  commissionAmount: string;
+  netAmount: string;
+  orderCount: number;
+  refundCount: number;
+  commissionRate: string;
+  fixedFeeTotal: string;
+  lineItems: SettlementLine[];
+  note?: string;
+  paidAt?: string;
+  createdAt: string;
+}
+
+export interface SettlementSummary {
+  pendingAmount: string;
+  paidAmount: string;
+  pendingCount: number;
+  lastSettlementAt: string | null;
+}
+
+export interface CommissionRule {
+  sellerId: string | null;
+  rate: string;
+  fixedFee: string;
+  fixedFeeCurrency: string;
+  note?: string;
 }

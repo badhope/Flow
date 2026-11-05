@@ -70,6 +70,9 @@ const CheckoutPage: React.FC = () => {
   const [shippingFee, setShippingFee] = useState<number>(0);
   /** 目的国税额预估（与下单同源，避免结账显示与扣款不一致） */
   const [taxQuote, setTaxQuote] = useState<TaxQuote | null>(null);
+  /** 结算币种与汇率：价格以 USD 为基准，展示时按汇率折算 */
+  const [fxRate, setFxRate] = useState<number>(1);
+  const [fxDigits, setFxDigits] = useState<number>(2);
   const [freeShippingApplied, setFreeShippingApplied] = useState<boolean>(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
