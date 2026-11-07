@@ -35,3 +35,9 @@ export async function refreshPayoutAccount() {
   const { data } = await http.post('/api/settlements/payout-account/refresh');
   return data;
 }
+
+/** 真实打款（Stripe Connect） */
+export async function executePayout(id: string): Promise<import('@shared/api.interface').Settlement> {
+  const { data } = await http.post<import('@shared/api.interface').Settlement>(`/api/settlements/${id}/payout`);
+  return data;
+}

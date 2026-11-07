@@ -1345,6 +1345,12 @@ export interface CustomsDeclaration {
   note?: string;
   generatedAt: string;
   filedAt?: string;
+  /** 报关行回执与错误 */
+  brokerRef?: string;
+  brokerStatus?: string;
+  submittedAt?: string;
+  lastError?: string;
+  attemptCount: number;
   warnings: string[];
 }
 
@@ -1376,6 +1382,10 @@ export interface Settlement {
   lineItems: SettlementLine[];
   note?: string;
   paidAt?: string;
+  /** 打款流水 */
+  payoutId?: string;
+  payoutProvider?: string;
+  payoutError?: string;
   createdAt: string;
 }
 

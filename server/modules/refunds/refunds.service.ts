@@ -19,6 +19,7 @@ import {
 } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
+import { StockService } from '../inventory/stock.service';
 import { resolveProviderRefundAmount } from '../payments/refund-amount';
 import { assertRefundWithinOrderCap } from './refund-cap';
 import {
@@ -39,6 +40,8 @@ interface RestoreItem {
   variantId: string | null;
   productId: string;
   quantity: number;
+  /** 实际发货仓：退款必须回补到这里，否则分仓与聚合会漂移 */
+  warehouseId: string | null;
 }
 
 @Injectable()
@@ -49,6 +52,7 @@ export class RefundsService {
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
     private readonly paymentsService: PaymentsService,
+    private readonly stockService: StockService,
   ) {}
 
   // ==================== Helpers ====================
@@ -408,7 +412,11 @@ export class RefundsService {
       if (refundItemsList && refundItemsList.length > 0) {
         for (const refundItem of refundItemsList) {
           const itemRows = await tx
-            .select({ variantId: orderItems.variantId, productId: orderItems.productId })
+            .select({
+              variantId: orderItems.variantId,
+              productId: orderItems.productId,
+              warehouseId: orderItems.warehouseId,
+            })
             .from(orderItems)
             .where(and(eq(orderItems.id, refundItem.orderItemId), eq(orderItems.orderId, order.id)));
           if (itemRows.length > 0) {
@@ -421,6 +429,7 @@ export class RefundsService {
             variantId: orderItems.variantId,
             productId: orderItems.productId,
             quantity: orderItems.quantity,
+            warehouseId: orderItems.warehouseId,
           })
           .from(orderItems)
           .where(eq(orderItems.orderId, order.id));
@@ -428,13 +437,18 @@ export class RefundsService {
 
       for (const item of itemsToRestore) {
         if (item.variantId) {
+          // 必须回补到**实际发货仓**：只加聚合值会让分仓与聚合永久漂移，
+          // 表现为"商品显示有货但从哪个仓都发不出"。
+          await this.stockService.adjustVariantStock(tx as unknown as Database, {
+            variantId: item.variantId,
+            delta: item.quantity,
+            sellerId,
+            warehouseId: item.warehouseId ?? null,
+          });
+
           await tx
             .update(productVariants)
-            .set({
-              stock: sql`${productVariants.stock} + ${item.quantity}`,
-              sold: sql`GREATEST(${productVariants.sold} - ${item.quantity}, 0)`,
-              updatedAt: now,
-            })
+            .set({ sold: sql`GREATEST(${productVariants.sold} - ${item.quantity}, 0)`, updatedAt: now })
             .where(eq(productVariants.id, item.variantId));
 
           await tx.insert(stockMovements).values({

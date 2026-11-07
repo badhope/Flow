@@ -4,6 +4,7 @@ import {
 import type { Request } from 'express';
 
 import { WarehouseService } from './warehouse.service';
+import { StockService } from './stock.service';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 /**
@@ -14,7 +15,10 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 @Controller('warehouses')
 @UseGuards(new RolesGuard(['seller', 'admin']))
 export class WarehouseController {
-  constructor(private readonly warehouses: WarehouseService) {}
+  constructor(
+    private readonly warehouses: WarehouseService,
+    private readonly stockService: StockService,
+  ) {}
 
   @Get()
   async list(@Req() req: Request) {
@@ -39,6 +43,32 @@ export class WarehouseController {
     if (!req.user?.id) throw new ForbiddenException('请先登录');
     await this.warehouses.remove(req.user.id, id);
     return { success: true };
+  }
+
+  /**
+   * 库存漂移巡检：聚合库存与分仓总和不一致的变体。
+   *
+   * 这类问题不会抛错，只会表现为"商品显示有货但发不出"。
+   * 必须能主动查，否则只能等买家投诉。
+   */
+  @Get('stock-drift')
+  async stockDrift(@Req() req: Request, @Query('limit') limit?: string) {
+    if (!req.user?.id) throw new ForbiddenException('请先登录');
+    const items = await this.stockService.findStockDrift(req.user.id, limit ? Number(limit) : 100);
+    return {
+      count: items.length,
+      items,
+      // 有漂移就是异常，明确告诉运维"要不要修"
+      healthy: items.length === 0,
+    };
+  }
+
+  /** 修复漂移：以分仓为准重算聚合（分仓是真相来源） */
+  @Post('stock-drift/repair')
+  async repairDrift(@Req() req: Request) {
+    if (!req.user?.id) throw new ForbiddenException('请先登录');
+    const repaired = await this.stockService.repairStockDrift(req.user.id);
+    return { repaired };
   }
 
   /** 某变体在各仓的库存 */

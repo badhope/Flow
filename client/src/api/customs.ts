@@ -21,3 +21,22 @@ export async function fileCustoms(id: string): Promise<CustomsDeclaration> {
   const { data } = await http.post<CustomsDeclaration>(`/api/customs/${id}/file`);
   return data;
 }
+
+export async function getBrokerConfig(): Promise<import('@shared/api.interface').CustomsBrokerConfig | null> {
+  const { data } = await http.get<import('@shared/api.interface').CustomsBrokerConfig | null>('/api/customs/broker/config');
+  return data;
+}
+
+export async function saveBrokerConfig(input: {
+  endpoint: string; provider?: string; credentials?: Record<string, string>;
+  signingSecret?: string; enabled?: boolean;
+}): Promise<import('@shared/api.interface').CustomsBrokerConfig> {
+  const { data } = await http.post<import('@shared/api.interface').CustomsBrokerConfig>('/api/customs/broker/config', input);
+  return data;
+}
+
+/** 向报关行真实提交 */
+export async function submitToBroker(id: string): Promise<import('@shared/api.interface').CustomsDeclaration> {
+  const { data } = await http.post<import('@shared/api.interface').CustomsDeclaration>(`/api/customs/${id}/submit`);
+  return data;
+}

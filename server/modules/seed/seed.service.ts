@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { count } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import {
@@ -10,6 +10,8 @@ import {
   products,
   shippingTemplates,
   users,
+  warehouseStock,
+  warehouses,
 } from '../../database/schema';
 
 /**
@@ -109,6 +111,31 @@ export class SeedService implements OnApplicationBootstrap {
         },
       ];
 
+      // 演示数据的默认仓：分仓库存是下单时的真相来源。
+      // 只写聚合会让商品在下单时找不到可发货的仓，也会让漂移巡检长期报警。
+      const [newWarehouse] = await tx
+        .insert(warehouses)
+        .values({
+          sellerId: seller.id,
+          name: '默认仓',
+          code: 'DEFAULT',
+          country: 'CN',
+          isDefault: true,
+          priority: 100,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      let demoWarehouseId = newWarehouse?.id;
+      if (!demoWarehouseId) {
+        const existing = await tx
+          .select({ id: warehouses.id })
+          .from(warehouses)
+          .where(eq(warehouses.sellerId, seller.id))
+          .limit(1);
+        demoWarehouseId = existing[0]?.id;
+      }
+
       for (const [index, item] of demoProducts.entries()) {
         const [product] = await tx
           .insert(products)
@@ -125,13 +152,20 @@ export class SeedService implements OnApplicationBootstrap {
           })
           .returning();
 
-        await tx.insert(productVariants).values({
+        const [variant] = await tx.insert(productVariants).values({
           productId: product.id,
           sku: `DEMO-${String(index + 1).padStart(3, '0')}`,
           price: item.price,
           stock: item.stock,
           status: 'active',
-        });
+        }).returning();
+
+        if (demoWarehouseId) {
+          await tx
+            .insert(warehouseStock)
+            .values({ warehouseId: demoWarehouseId, variantId: variant.id, stock: item.stock })
+            .onConflictDoNothing();
+        }
       }
 
       // 静态页面（页脚链接可达；卖家可在 CMS 里继续编辑）

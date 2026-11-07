@@ -10,6 +10,7 @@ import type {
   UpdateProductRequest,
 } from '../../../shared/api.interface';
 import { AuditService } from '../audit/audit.service';
+import { StockService } from '../inventory/stock.service';
 import { evaluatePublishReadiness } from './product-publish-check';
 import { evaluateCopyQuality, type CopyQualityReport } from './copy-quality';
 import { planProductQuery } from './product-visibility';
@@ -64,6 +65,7 @@ export class ProductsService {
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: Database,
     private readonly auditService: AuditService,
+    private readonly stockService: StockService,
   ) {}
 
   // ── DTO helpers ──────────────────────────────
@@ -519,7 +521,7 @@ export class ProductsService {
    * 只在默认仓尚无该变体记录时写入，避免覆盖运营已经调过的分仓数据。
    */
   private async mirrorStockToDefaultWarehouse(
-    tx: typeof this.db,
+    tx: Database,
     sellerId: string,
     variants: Array<{ id: string; stock: number }>,
   ): Promise<void> {
@@ -631,25 +633,37 @@ export class ProductsService {
         .where(eq(productVariants.productId, id));
 
       if (variantRows.length === 0 && input.price !== undefined) {
-        await this.db.insert(productVariants).values({
-          productId: id,
-          sku: `SKU-${id.slice(0, 8).toUpperCase()}`,
-          optionValues: [],
-          price: String(input.price),
-          originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : null,
-          stock: input.stock ?? 0,
-          status: 'active',
+        await this.db.transaction(async (tx) => {
+          const [created] = await tx.insert(productVariants).values({
+            productId: id,
+            sku: `SKU-${id.slice(0, 8).toUpperCase()}`,
+            optionValues: [],
+            price: String(input.price),
+            originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : null,
+            stock: 0,
+            status: 'active',
+          }).returning();
+          // 走统一入口：分仓与聚合同时写，避免只有聚合值没有分仓记录
+          await this.stockService.setVariantStock(tx as unknown as Database, {
+            variantId: created.id,
+            stock: input.stock ?? 0,
+            sellerId: userId,
+          });
         });
-        patch.totalStock = input.stock ?? 0;
       } else if (variantRows.length === 1) {
         const only = variantRows[0];
         const variantPatch: Partial<typeof productVariants.$inferInsert> = { updatedAt: new Date() };
         if (input.price !== undefined) variantPatch.price = String(input.price);
         if (input.originalPrice !== undefined) variantPatch.originalPrice = String(input.originalPrice);
-        if (input.stock !== undefined) variantPatch.stock = input.stock;
         await this.db.update(productVariants).set(variantPatch).where(eq(productVariants.id, only.id));
         if (input.stock !== undefined) {
-          patch.totalStock = input.stock;
+          await this.db.transaction(async (tx) => {
+            await this.stockService.setVariantStock(tx as unknown as Database, {
+              variantId: only.id,
+              stock: input.stock as number,
+              sellerId: userId,
+            });
+          });
         }
       }
     }
@@ -901,13 +915,15 @@ export class ProductsService {
         productId, sku: dto.sku, optionValues: dto.optionValues ?? [],
         price: String(dto.price),
         originalPrice: dto.originalPrice !== undefined ? String(dto.originalPrice) : null,
-        stock: dto.stock ?? 0, sold: dto.sold ?? 0, image: dto.image ?? null,
+        stock: 0, sold: dto.sold ?? 0, image: dto.image ?? null,
         status: dto.status ?? 'active',
       }).returning();
 
-      await tx.update(products)
-        .set({ totalStock: sql`${products.totalStock} + ${dto.stock ?? 0}` })
-        .where(eq(products.id, productId));
+      await this.stockService.setVariantStock(tx as unknown as Database, {
+        variantId: variant.id,
+        stock: dto.stock ?? 0,
+        sellerId: actor?.userId,
+      });
 
       return variant;
     });
@@ -942,10 +958,14 @@ export class ProductsService {
     patch.updatedAt = new Date();
 
     if (dto.stock !== undefined && dto.stock !== existing.stock) {
-      const diff = dto.stock - existing.stock;
       await this.db.transaction(async (tx) => {
-        await tx.update(productVariants).set(patch).where(eq(productVariants.id, variantId));
-        await tx.update(products).set({ totalStock: sql`${products.totalStock} + ${diff}` }).where(eq(products.id, existing.productId));
+        const { stock: _stock, ...rest } = patch;
+        await tx.update(productVariants).set(rest).where(eq(productVariants.id, variantId));
+        // 统一入口：分仓 + 聚合一起写
+        await this.stockService.setVariantStock(tx as unknown as Database, {
+          variantId,
+          stock: dto.stock as number,
+        });
       });
     } else {
       await this.db.update(productVariants).set(patch).where(eq(productVariants.id, variantId));
@@ -1171,14 +1191,21 @@ export class ProductsService {
             // 用记录自带的原始行号取值：validRecords 已经剔除了失败行，
             // 用循环下标取 rows[i] 会把价格/库存写到错误的商品上。
             const row = rows[record.sourceIndex];
-            await tx.insert(productVariants).values({
+            const [csvVariant] = await tx.insert(productVariants).values({
               productId: inserted.id as string,
               sku: `SKU-${(inserted.id as string).slice(0, 8).toUpperCase()}`,
               optionValues: [],
               price: String(Number(row.price)),
-              stock: Math.floor(Number(row.stock)),
+              stock: 0,
               status: 'active',
-            } as any);
+            }).returning();
+
+            // 统一入口：分仓与聚合一起写
+            await this.stockService.setVariantStock(tx as unknown as Database, {
+              variantId: csvVariant.id,
+              stock: Math.floor(Number(row.stock)) || 0,
+              sellerId: userId,
+            });
           }
         });
         successCount = validRecords.length;

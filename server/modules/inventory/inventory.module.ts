@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { StockReservationService } from './stock-reservation.service';
 import { WarehouseService } from './warehouse.service';
+import { StockService } from './stock.service';
 import { WarehouseController } from './warehouse.controller';
 
 /**
@@ -12,7 +13,7 @@ import { WarehouseController } from './warehouse.controller';
  */
 @Module({
   controllers: [WarehouseController],
-  providers: [StockReservationService, WarehouseService],
-  exports: [StockReservationService, WarehouseService],
+  providers: [StockReservationService, WarehouseService, StockService],
+  exports: [StockReservationService, WarehouseService, StockService],
 })
 export class InventoryModule {}
