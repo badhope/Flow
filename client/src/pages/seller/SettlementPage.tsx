@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { getSettlementSummary, getMyCommission, listSettlements } from '@/api/settlement';
+import { getSettlementSummary, getMyCommission, listSettlements, getPayoutAccount } from '@/api/settlement';
+import type { PayoutAccount } from '@shared/api.interface';
 import type { Settlement, SettlementSummary, CommissionRule } from '@shared/api.interface';
 import { notifyError } from '@/lib/error-feedback';
 
@@ -23,18 +24,21 @@ const SettlementPage: React.FC = () => {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [payout, setPayout] = useState<PayoutAccount | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
-      const [s, c, list] = await Promise.all([
+      const [s, c, list, p] = await Promise.all([
         getSettlementSummary(),
         getMyCommission(),
         listSettlements(50),
+        getPayoutAccount().catch(() => null),
       ]);
       setSummary(s);
       setCommission(c);
       setSettlements(list);
+      setPayout(p);
     } catch (error: unknown) {
       notifyError(error, '加载结算数据失败');
     } finally {
@@ -93,6 +97,27 @@ const SettlementPage: React.FC = () => {
           </div>
         </FlowPanel>
       )}
+
+      <FlowPanel>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="text-[var(--flow-text-2)]">收款账户</span>
+          {!payout?.configured ? (
+            <span className="text-[var(--flow-warn)]">
+              未开通
+              <span className="ml-1 text-[var(--flow-text-3)]">
+                （{payout?.stripeConfigured ? '点击结算单的"打款"前需先开通' : '平台未配置 Stripe Connect'}）
+              </span>
+            </span>
+          ) : (
+            <>
+              <span className="font-mono text-[var(--flow-text-1)]">{payout.accountId}</span>
+              <FlowStatus tone={payout.payoutsEnabled ? 'ok' : payout.detailsSubmitted ? 'warn' : 'idle'}>
+                {payout.payoutsEnabled ? '可收款' : payout.detailsSubmitted ? '待验证' : '资料未完成'}
+              </FlowStatus>
+            </>
+          )}
+        </div>
+      </FlowPanel>
 
       <FlowPanel>
         {loading ? (

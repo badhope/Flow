@@ -6,12 +6,12 @@
 
 **跨境电商平台。买家商城 + 卖家 AI 工作台，一套代码。**
 
-[![Version](https://img.shields.io/badge/version-v1.27.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.28.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Tests](https://img.shields.io/badge/tests-394%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-417%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -80,6 +80,9 @@ npm run dev                       # Vite + NestJS
 | **清关** | 商品级 HS 编码、原产国、报关品名。一单一单据，行项目冻结为快照。申报价值用**实际成交价**，不是标价。 |
 | **库存预留** | 支付后 `soft → consumed`，取消/超时 `released`。能回答「多少库存被未支付订单占着」——旧模型给不出的数字。 |
 | **卖家结算** | 佣金规则、周期结算、逐单明细。费率快照进结算单，改费率不会重写历史。 |
+| **多仓** | 分仓库存与仓间调拨。选仓按「目的国本地仓 → 优先级 → 可用量」；聚合库存同事务重算，不会出现"分仓有货但商品售罄"。 |
+| **报关行** | 通用 HTTP 适配器，HMAC 请求签名，仅对 5xx 重试。回执写回单据，被拒则保持草稿并记录原因。 |
+| **真实打款** | Stripe Connect 转账，以结算单号做幂等键。Stripe 侧 + 本地条件更新两层保证，重复打款不可能发生。 |
 
 详见 [docs/CROSS-BORDER.md](docs/CROSS-BORDER.md)。
 
@@ -124,8 +127,8 @@ npm run dev                       # Vite + NestJS
 | 项 | 状态 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` |
-| 规模 | 30 NestJS 模块 · 175 端点 · 44 表 · 12 迁移 |
-| 测试 | **394 用例 / 56 文件** |
+| 规模 | 30 NestJS 模块 · 193 端点 · 49 表 · 13 迁移 |
+| 测试 | **417 用例 / 58 文件** |
 | E2E | 6 套跑真实 PostgreSQL：工作流、无 Key 降级、交易、渠道、副驾、导购 |
 | 浏览器 QA | 30 条路由，桌面 + 移动，0 console 错误 / 0 失败请求 |
 | CI | lint → typecheck → 单测 → 生产依赖审计 → 构建 → Postgres E2E |

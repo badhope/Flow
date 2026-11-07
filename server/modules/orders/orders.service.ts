@@ -16,6 +16,7 @@ import { computeOrderPricing } from '../../common/pricing/order-pricing';
 import { computeTax } from '../../common/pricing/tax';
 import { FxService } from '../fx/fx.service';
 import { StockReservationService } from '../inventory/stock-reservation.service';
+import { WarehouseService } from '../inventory/warehouse.service';
 import { canAccessSellerResource, isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
@@ -51,6 +52,7 @@ export class OrdersService {
     private readonly paymentsService: PaymentsService,
     private readonly fxService: FxService,
     private readonly stockReservation: StockReservationService,
+    private readonly warehouseService: WarehouseService,
   ) {}
 
   private generateOrderNo(): string {
@@ -716,6 +718,8 @@ export class OrdersService {
       unitPrice: string;
       quantity: number;
       subtotal: string;
+      /** 发货仓（拆单时记录主仓） */
+      warehouseId?: string | null;
     }> = [];
 
     dto.items.forEach((item, index) => {
@@ -817,6 +821,34 @@ export class OrdersService {
       (addressSnapshot as unknown as Record<string, unknown>).sessionId = sessionId;
     }
 
+    // 选仓：按目的国本地仓优先 → 优先级 → 可用量，算出从哪些仓发货。
+    // 必须在事务外先算，失败时不必回滚已开的连接；实际扣减仍在事务内。
+    const allocationPlans = await this.warehouseService.planAllocation(
+      orderSellerId ?? '',
+      dto.items.map((item, index) => ({
+        variantId: itemVariantIds.find((e) => e.index === index)!.variantId,
+        quantity: item.quantity,
+      })),
+      shippingCountry,
+    );
+
+    // 任一商品无法完全满足就拒绝下单，不做静默拆单或部分发货
+    for (const [variantId, plan] of allocationPlans) {
+      if (!plan.fulfillable) {
+        // 区分两种失败：仓库没配 vs 真的没货。
+        // 前者是配置问题，报"库存不足"会让人查错方向。
+        const hasAnyWarehouse = plan.allocations.length > 0;
+        if (!hasAnyWarehouse) {
+          throw new ConflictException(
+            '商品尚未配置仓库库存，无法下单。请在卖家后台为仓库分配库存后重试',
+          );
+        }
+        throw new ConflictException(
+          `库存不足（缺 ${plan.shortage} 件，SKU ${variantId.slice(0, 8)}），请减少数量后重试`,
+        );
+      }
+    }
+
     const result = await this.db.transaction(async (tx) => {
       const insertedOrders = await tx
         .insert(orders)
@@ -845,6 +877,15 @@ export class OrdersService {
 
       const newOrder = insertedOrders[0];
 
+      // 发货仓必须在写 order_items 之前确定：
+      // 这个字段是"从哪发货"的永久记录，事后补写会漏掉并发窗口。
+      dto.items.forEach((item, index) => {
+        const variantId = itemVariantIds.find((e) => e.index === index)?.variantId;
+        if (!variantId) return;
+        const plan = allocationPlans.get(variantId);
+        orderItemValues[index].warehouseId = plan?.allocations[0]?.warehouseId ?? null;
+      });
+
       await tx.insert(orderItems).values(
         orderItemValues.map((item) => ({
           orderId: newOrder.id,
@@ -857,35 +898,29 @@ export class OrdersService {
           unitPrice: item.unitPrice,
           quantity: item.quantity,
           subtotal: item.subtotal,
+          warehouseId: item.warehouseId ?? null,
         })),
       );
 
       // 下单即锁定库存；销量（sold）在支付成功入账时累计（见 PaymentsService.markOrderPaid）
+      //
+      // 分仓扣减：按 planAllocation 算出的方案逐仓扣，扣不动就整体回滚。
+      // 聚合字段（product_variants.stock / products.total_stock）随后按分仓总和重算，
+      // 避免"分仓有货但商品显示售罄"。
       for (const [index, item] of dto.items.entries()) {
         const entry = itemVariantIds.find((e) => e.index === index);
         const variantId = entry!.variantId;
-        const updated = await tx
-          .update(productVariants)
-          .set({
-            stock: sql`${productVariants.stock} - ${item.quantity}`,
-          })
-          .where(and(
-            eq(productVariants.id, variantId),
-            gte(productVariants.stock, item.quantity),
-          ))
-          .returning({ id: productVariants.id });
+        const plan = allocationPlans.get(variantId);
 
-        if (updated.length === 0) {
-          throw new ConflictException('库存不足，下单失败');
-        }
+        await this.warehouseService.deduct(
+          tx as unknown as typeof this.db,
+          (plan?.allocations ?? []).map((a) => ({
+            warehouseId: a.warehouseId,
+            variantId,
+            quantity: a.quantity,
+          })),
+        );
 
-        // Also update product-level aggregates (totalStock)
-        await tx
-          .update(products)
-          .set({
-            totalStock: sql`${products.totalStock} - ${item.quantity}`,
-          })
-          .where(eq(products.id, item.productId));
       }
 
       if (couponId) {
@@ -1017,26 +1052,21 @@ export class OrdersService {
           productId: orderItems.productId,
           variantId: orderItems.variantId,
           quantity: orderItems.quantity,
+          warehouseId: orderItems.warehouseId,
         })
         .from(orderItems)
         .where(eq(orderItems.orderId, orderId));
 
+      // 回补到**实际发货仓**，不是笼统加到聚合字段：
+      // 分仓模型下"回补错仓"会让 A 仓虚高、B 仓缺货。
       for (const item of items) {
         if (!item.variantId) continue;
-        await tx
-          .update(productVariants)
-          .set({
-            // 仅回补库存；销量在下单时未累计（支付入账时才累计）
-            stock: sql`${productVariants.stock} + ${item.quantity}`,
-          })
-          .where(eq(productVariants.id, item.variantId));
-
-        if (item.productId) {
-          await tx
-            .update(products)
-            .set({ totalStock: sql`${products.totalStock} + ${item.quantity}` })
-            .where(eq(products.id, item.productId));
-        }
+        // restore() 内部会按分仓总和重算聚合字段（product_variants.stock / products.total_stock），
+        // 这里**不能**再手动 +1 次，否则每次取消都会凭空多出库存。
+        await this.warehouseService.restore(
+          tx as unknown as typeof this.db,
+          [{ warehouseId: item.warehouseId, variantId: item.variantId, quantity: item.quantity }],
+        );
       }
 
       if (couponId) {

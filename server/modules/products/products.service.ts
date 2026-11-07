@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { products, categories, productVariants, reviews, stockMovements } from '../../database/schema';
+import { products, categories, productVariants, reviews, stockMovements, warehouseStock, warehouses } from '../../database/schema';
 import { eq, and, count, desc, asc, ilike, sql, inArray, type SQL } from 'drizzle-orm';
 import type {
   Product,
@@ -456,12 +456,17 @@ export class ProductsService {
 
           const totalStock = variantRows.reduce((sum, v) => sum + v.stock, 0);
           await tx.update(products).set({ totalStock }).where(eq(products.id, productRow.id));
+
+          // 分仓镜像：把初始库存落到默认仓，否则商品无法下单
+          await this.mirrorStockToDefaultWarehouse(tx, userId, variantRows.map((v) => ({
+            id: v.id, stock: v.stock,
+          })));
         } else {
           // 界面创建路径（只填价格/库存，不带变体）：自动生成默认变体，
           // 与 CSV 导入口径一致，确保商品可加购、可下单。
           const defaultSku = input.sku?.trim() || `SKU-${(productRow.id as string).slice(0, 8).toUpperCase()}`;
           const stock = input.stock ?? 0;
-          await tx.insert(productVariants).values({
+          const [defaultVariant] = await tx.insert(productVariants).values({
             productId: productRow.id,
             sku: defaultSku,
             optionValues: [],
@@ -469,8 +474,11 @@ export class ProductsService {
             originalPrice: input.originalPrice !== undefined ? String(input.originalPrice) : null,
             stock,
             status: 'active',
-          });
+          }).returning();
           await tx.update(products).set({ totalStock: stock }).where(eq(products.id, productRow.id));
+
+          // 同样镜像到默认仓，保证商品可下单
+          await this.mirrorStockToDefaultWarehouse(tx, userId, [{ id: defaultVariant.id, stock }]);
         }
 
         return productRow;
@@ -500,6 +508,64 @@ export class ProductsService {
   }
 
   // ── Update product ───────────────────────────
+
+  /**
+   * 把变体库存镜像到卖家的默认仓。
+   *
+   * 为什么必须做：分仓库存是下单时的真相来源。商品创建只写了聚合字段
+   * （product_variants.stock），没有 warehouse_stock 记录，下单会因
+   * "找不到仓库库存"直接 409——这是 E2E 抓到的真实回归。
+   *
+   * 只在默认仓尚无该变体记录时写入，避免覆盖运营已经调过的分仓数据。
+   */
+  private async mirrorStockToDefaultWarehouse(
+    tx: typeof this.db,
+    sellerId: string,
+    variants: Array<{ id: string; stock: number }>,
+  ): Promise<void> {
+    if (!sellerId || variants.length === 0) return;
+    let whRows = await tx
+      .select({ id: warehouses.id })
+      .from(warehouses)
+      .where(and(eq(warehouses.sellerId, sellerId), eq(warehouses.isDefault, true)))
+      .limit(1);
+
+    // 自动兜底：卖家还没有默认仓时立刻创建。
+    // 不能依赖启动钩子——它在进程启动 15 秒后才跑，而商品可能在之前就创建了，
+    // 结果就是"商品建好但无法下单"。
+    if (whRows.length === 0) {
+      whRows = await tx
+        .insert(warehouses)
+        .values({
+          sellerId,
+          name: '默认仓',
+          code: 'DEFAULT',
+          country: 'CN',
+          isDefault: true,
+          priority: 100,
+        })
+        .onConflictDoNothing()
+        .returning({ id: warehouses.id });
+
+      // 并发下另一个请求可能已插入：再查一次
+      if (whRows.length === 0) {
+        whRows = await tx
+          .select({ id: warehouses.id })
+          .from(warehouses)
+          .where(and(eq(warehouses.sellerId, sellerId), eq(warehouses.isDefault, true)))
+          .limit(1);
+      }
+    }
+    if (whRows.length === 0) return;
+
+    for (const v of variants) {
+      if (v.stock <= 0) continue;
+      await tx
+        .insert(warehouseStock)
+        .values({ warehouseId: whRows[0].id, variantId: v.id, stock: v.stock })
+        .onConflictDoNothing();
+    }
+  }
 
   async update(
     id: string,

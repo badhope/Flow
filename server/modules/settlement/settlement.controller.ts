@@ -38,6 +38,18 @@ export class SettlementController {
     return this.settlements.resolveCommissionRule(req.user.id);
   }
 
+  /** 卖家的收款账户状态 */
+  @Get('payout-account')
+  async payoutAccount(@Req() req: Request) {
+    if (!req.user?.id) throw new ForbiddenException('请先登录');
+    return this.settlements.getPayoutAccount(req.user.id);
+  }
+
+  /**
+   * 注意路由顺序：静态路径必须声明在 `:id` 之前。
+   * NestJS 按声明顺序匹配，`@Get(':id')` 会把 "payout-account" 当成 id，
+   * 直接查库并 500。同理 `summary`/`commission` 也必须在前。
+   */
   @Get(':id')
   async getOne(@Req() req: Request, @Param('id') id: string) {
     const actor = { userId: req.user?.id, role: req.user?.role };
@@ -71,7 +83,43 @@ export class SettlementController {
     return this.settlements.generate(body.sellerId, start, end);
   }
 
-  /** 管理员：标记已打款 */
+  /** 卖家：开通收款账户（返回 Stripe onboarding 链接） */
+  @Post('payout-account')
+  async createPayoutAccount(
+    @Req() req: Request,
+    @Body() body: { email?: string; country?: string; returnUrl?: string; refreshUrl?: string },
+  ) {
+    if (!req.user?.id) throw new ForbiddenException('请先登录');
+    if (!body?.email?.trim()) throw new BadRequestException('需要 email');
+    const base = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000';
+    return this.settlements.createPayoutAccount(req.user.id, {
+      email: body.email.trim(),
+      country: body.country,
+      returnUrl: body.returnUrl ?? `${base}/seller/settlements?payout=done`,
+      refreshUrl: body.refreshUrl ?? `${base}/seller/settlements?payout=refresh`,
+    });
+  }
+
+  /** 卖家：刷新收款账户状态（onboarding 回来后） */
+  @Post('payout-account/refresh')
+  async refreshPayoutAccount(@Req() req: Request) {
+    if (!req.user?.id) throw new ForbiddenException('请先登录');
+    return this.settlements.refreshPayoutAccount(req.user.id);
+  }
+
+  /**
+   * 管理员：真实打款（Stripe Connect）。
+   *
+   * 与下面的 `/:id/pay` 区别：`pay` 是手工标记（线下已转账），这里是系统真实发起转账。
+   */
+  @Post(':id/payout')
+  @UseGuards(new RolesGuard(['admin']))
+  async payout(@Req() req: Request, @Param('id') id: string) {
+    if (req.user?.role !== 'admin') throw new ForbiddenException('仅管理员可执行打款');
+    return this.settlements.executePayout(id, { role: req.user.role });
+  }
+
+  /** 管理员：标记已打款（线下转账） */
   @Post(':id/pay')
   @UseGuards(new RolesGuard(['admin']))
   async pay(@Req() req: Request, @Param('id') id: string) {

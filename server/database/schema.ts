@@ -316,6 +316,8 @@ export const orderItems = pgTable('order_items', {
   productTitle: varchar('product_title', { length: 500 }).notNull(),
   variantInfo: varchar('variant_info', { length: 500 }), // 如 "红色 / XL"
   productSku: varchar('product_sku', { length: 100 }),
+  /** 发货仓 */
+  warehouseId: uuid('warehouse_id'),
   productImage: text('product_image'),
   unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
   quantity: integer('quantity').notNull(),
@@ -780,6 +782,12 @@ export const customsDeclarations = pgTable('customs_declarations', {
   declaredValueUsd: decimal('declared_value_usd', { precision: 12, scale: 2 }).notNull().default('0'),
   lineItems: jsonb('line_items').notNull().default(sql`'[]'::jsonb`),
   note: text('note'),
+  /** 报关行回执 */
+  brokerRef: varchar('broker_ref', { length: 120 }),
+  brokerStatus: varchar('broker_status', { length: 40 }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  lastError: text('last_error'),
+  attemptCount: integer('attempt_count').notNull().default(0),
   generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
   filedAt: timestamp('filed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -801,6 +809,8 @@ export const stockReservations = pgTable('stock_reservations', {
   variantId: uuid('variant_id').notNull().references(() => productVariants.id, { onDelete: 'cascade' }),
   orderId: uuid('order_id').references(() => orders.id, { onDelete: 'cascade' }),
   orderNo: varchar('order_no', { length: 32 }),
+  /** 发货仓；null 表示未指定（单仓历史数据） */
+  warehouseId: uuid('warehouse_id'),
   quantity: integer('quantity').notNull(),
   /** active=占用中 / consumed=已转实际扣减 / released=已释放 */
   status: varchar('status', { length: 20 }).notNull().default('active'),
@@ -849,12 +859,119 @@ export const settlements = pgTable('settlements', {
   fixedFeeTotal: decimal('fixed_fee_total', { precision: 12, scale: 2 }).notNull().default('0'),
   lineItems: jsonb('line_items').notNull().default(sql`'[]'::jsonb`),
   note: text('note'),
+  /** 打款流水（Stripe Connect transfer id 等） */
+  payoutId: varchar('payout_id', { length: 120 }),
+  payoutProvider: varchar('payout_provider', { length: 30 }),
+  payoutError: text('payout_error'),
   paidAt: timestamp('paid_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   sellerStatusIdx: index('settlements_seller_status_idx').on(t.sellerId, t.status),
   periodIdx: index('settlements_period_idx').on(t.periodStart, t.periodEnd),
+}));
+
+// ==================== 多仓 ====================
+
+/**
+ * 仓库。
+ *
+ * 多仓的意义不只是"多几个地址"：它决定从哪发货、跨境还是本地、
+ * 以及同一 SKU 在有货时按什么优先级选仓。
+ */
+export const warehouses = pgTable('warehouses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  code: varchar('code', { length: 32 }).notNull(),
+  /** 仓库所在国，决定是否跨境 */
+  country: varchar('country', { length: 2 }).notNull().default('CN'),
+  address: text('address'),
+  contactName: varchar('contact_name', { length: 100 }),
+  contactPhone: varchar('contact_phone', { length: 30 }),
+  /** 同一 SKU 多仓有货时的选择优先级，数字小者优先 */
+  priority: integer('priority').notNull().default(100),
+  isDefault: boolean('is_default').notNull().default(false),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sellerCodeUnique: uniqueIndex('warehouses_seller_code_unique').on(t.sellerId, t.code),
+}));
+
+/** 分仓库存：真实可售数量按仓拆分。safetyStock 是预警线，不参与可售计算 */
+export const warehouseStock = pgTable('warehouse_stock', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  warehouseId: uuid('warehouse_id').notNull().references(() => warehouses.id, { onDelete: 'cascade' }),
+  variantId: uuid('variant_id').notNull().references(() => productVariants.id, { onDelete: 'cascade' }),
+  stock: integer('stock').notNull().default(0),
+  safetyStock: integer('safety_stock').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  warehouseVariantUnique: uniqueIndex('warehouse_stock_unique').on(t.warehouseId, t.variantId),
+  variantIdx: index('warehouse_stock_variant_idx').on(t.variantId),
+}));
+
+/** 仓间调拨 */
+export const stockTransfers = pgTable('stock_transfers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  transferNo: varchar('transfer_no', { length: 40 }).notNull().unique(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  variantId: uuid('variant_id').notNull().references(() => productVariants.id, { onDelete: 'cascade' }),
+  fromWarehouseId: uuid('from_warehouse_id').notNull().references(() => warehouses.id, { onDelete: 'cascade' }),
+  toWarehouseId: uuid('to_warehouse_id').notNull().references(() => warehouses.id, { onDelete: 'cascade' }),
+  quantity: integer('quantity').notNull(),
+  /** pending=待发货 / shipped=在途 / completed=已入库 / cancelled=已取消 */
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  note: text('note'),
+  shippedAt: timestamp('shipped_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sellerStatusIdx: index('stock_transfers_seller_idx').on(t.sellerId, t.status),
+}));
+
+// ==================== 报关行 / 打款账户 ====================
+
+/**
+ * 报关行对接配置。
+ *
+ * 不同报关服务商的接口形态差异很大，因此这里只存"端点 + 凭据 + 签名密钥"，
+ * 具体报文由适配器（CustomsBrokerAdapter）负责。这样换一家报关行不用改表结构。
+ */
+export const customsBrokerConfigs = pgTable('customs_broker_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: varchar('provider', { length: 32 }).notNull().default('generic_http'),
+  endpoint: text('endpoint').notNull(),
+  credentials: jsonb('credentials').notNull().default(sql`'{}'::jsonb`),
+  signingSecret: text('signing_secret'),
+  enabled: boolean('enabled').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sellerUnique: uniqueIndex('customs_broker_configs_seller_unique').on(t.sellerId),
+}));
+
+/** 卖家收款账户（Stripe Connect 等） */
+export const payoutAccounts = pgTable('payout_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: varchar('provider', { length: 30 }).notNull().default('stripe'),
+  /** 渠道侧账户 id，如 Stripe acct_xxx */
+  externalAccountId: varchar('external_account_id', { length: 120 }).notNull(),
+  /** pending=资料未完成 / verified=可收款 / restricted=受限 */
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+  country: varchar('country', { length: 2 }).notNull().default('CN'),
+  payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+  detailsSubmitted: boolean('details_submitted').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sellerProviderUnique: uniqueIndex('payout_accounts_seller_provider_unique').on(t.sellerId, t.provider),
 }));
 
 // ==================== Types ====================

@@ -3,7 +3,8 @@ import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
 
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
-import { commissionRules, orders, refunds, settlements } from '../../database/schema';
+import { commissionRules, orders, payoutAccounts, refunds, settlements } from '../../database/schema';
+import { StripeConnectService } from './stripe-connect.service';
 
 /**
  * 卖家结算与平台佣金。
@@ -54,6 +55,10 @@ export interface SettlementView {
   lineItems: SettlementLine[];
   note?: string;
   paidAt?: string;
+  /** 打款流水 */
+  payoutId?: string;
+  payoutProvider?: string;
+  payoutError?: string;
   createdAt: string;
 }
 
@@ -69,7 +74,10 @@ export interface CommissionRuleView {
 export class SettlementService {
   private readonly logger = new Logger(SettlementService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
+    private readonly stripeConnect: StripeConnectService,
+  ) {}
 
   /** 取卖家生效的佣金规则：卖家专属优先，否则用全局默认 */
   async resolveCommissionRule(sellerId: string): Promise<CommissionRuleView> {
@@ -376,6 +384,194 @@ export class SettlementService {
     };
   }
 
+  // ---------------- 收款账户与打款 ----------------
+
+  /** 卖家的收款账户状态 */
+  async getPayoutAccount(sellerId: string) {
+    const rows = await this.db
+      .select()
+      .from(payoutAccounts)
+      .where(and(eq(payoutAccounts.sellerId, sellerId), eq(payoutAccounts.provider, 'stripe')))
+      .limit(1);
+    if (rows.length === 0) {
+      return { configured: false, stripeConfigured: this.stripeConnect.isConfigured() };
+    }
+    const r = rows[0];
+    return {
+      configured: true,
+      stripeConfigured: this.stripeConnect.isConfigured(),
+      accountId: r.externalAccountId,
+      status: r.status,
+      payoutsEnabled: r.payoutsEnabled,
+      detailsSubmitted: r.detailsSubmitted,
+      currency: r.currency,
+      country: r.country,
+    };
+  }
+
+  /**
+   * 为卖家开通收款账户。
+   *
+   * 真实调用 Stripe：创建 Express 账户 → 保存本地 → 返回 onboarding 链接。
+   * 未配置密钥时明确报错，不伪造"已开通"。
+   */
+  async createPayoutAccount(sellerId: string, params: { email: string; country?: string; returnUrl: string; refreshUrl: string }) {
+    if (!this.stripeConnect.isConfigured()) {
+      throw new BadRequestException('Stripe Connect 未配置（缺少 STRIPE_SECRET_KEY）');
+    }
+
+    const existing = await this.db
+      .select()
+      .from(payoutAccounts)
+      .where(and(eq(payoutAccounts.sellerId, sellerId), eq(payoutAccounts.provider, 'stripe')))
+      .limit(1);
+
+    let accountId: string;
+    if (existing.length > 0) {
+      accountId = existing[0].externalAccountId;
+    } else {
+      const account = await this.stripeConnect.createAccount({
+        email: params.email,
+        country: params.country ?? 'US',
+        sellerId,
+      });
+      accountId = account.id;
+      await this.db.insert(payoutAccounts).values({
+        sellerId,
+        provider: 'stripe',
+        externalAccountId: account.id,
+        status: account.payoutsEnabled ? 'verified' : 'pending',
+        payoutsEnabled: account.payoutsEnabled,
+        detailsSubmitted: account.detailsSubmitted,
+        country: params.country ?? 'US',
+      });
+    }
+
+    const url = await this.stripeConnect.createAccountLink(accountId, params.returnUrl, params.refreshUrl);
+    return { accountId, onboardingUrl: url };
+  }
+
+  /** onboarding 完成回调后刷新账户状态 */
+  async refreshPayoutAccount(sellerId: string) {
+    const rows = await this.db
+      .select()
+      .from(payoutAccounts)
+      .where(and(eq(payoutAccounts.sellerId, sellerId), eq(payoutAccounts.provider, 'stripe')))
+      .limit(1);
+    if (rows.length === 0) throw new NotFoundException('尚未开通收款账户');
+    if (!this.stripeConnect.isConfigured()) {
+      throw new BadRequestException('Stripe Connect 未配置');
+    }
+
+    const account = await this.stripeConnect.getAccount(rows[0].externalAccountId);
+    const status = account.payoutsEnabled ? 'verified' : (account.detailsSubmitted ? 'pending' : 'restricted');
+    const updated = await this.db
+      .update(payoutAccounts)
+      .set({
+        status,
+        payoutsEnabled: account.payoutsEnabled,
+        detailsSubmitted: account.detailsSubmitted,
+        updatedAt: new Date(),
+      })
+      .where(eq(payoutAccounts.id, rows[0].id))
+      .returning();
+    return {
+      configured: true,
+      accountId: updated[0].externalAccountId,
+      status: updated[0].status,
+      payoutsEnabled: updated[0].payoutsEnabled,
+      detailsSubmitted: updated[0].detailsSubmitted,
+    };
+  }
+
+  /**
+   * 真实打款。
+   *
+   * 前置条件（任一不满足就拒绝，不静默降级）：
+   *   1. 结算单存在且为 pending
+   *   2. 卖家有已验证的收款账户
+   *   3. Stripe Connect 已配置
+   *
+   * 幂等：Stripe 侧用结算单号做 Idempotency-Key；本地用条件更新
+   * （status = 'pending'）抢占，重复点击不会打两次款。
+   */
+  async executePayout(id: string, actor: { role?: string }) {
+    if (actor.role !== 'admin') throw new BadRequestException('仅管理员可执行打款');
+
+    const rows = await this.db.select().from(settlements).where(eq(settlements.id, id));
+    if (rows.length === 0) throw new NotFoundException('结算单不存在');
+    const settlement = rows[0];
+    if (settlement.status !== 'pending') {
+      throw new BadRequestException(`当前状态 ${settlement.status} 无法打款`);
+    }
+
+    const net = Number(settlement.netAmount);
+    if (net <= 0) throw new BadRequestException('结算净额为 0，无需打款');
+
+    const accountRows = await this.db
+      .select()
+      .from(payoutAccounts)
+      .where(and(
+        eq(payoutAccounts.sellerId, settlement.sellerId),
+        eq(payoutAccounts.provider, 'stripe'),
+      ))
+      .limit(1);
+    if (accountRows.length === 0) {
+      throw new BadRequestException('卖家尚未开通收款账户');
+    }
+    if (!accountRows[0].payoutsEnabled) {
+      throw new BadRequestException('卖家收款账户尚未通过验证，无法打款');
+    }
+    if (!this.stripeConnect.isConfigured()) {
+      throw new BadRequestException('Stripe Connect 未配置（缺少 STRIPE_SECRET_KEY）');
+    }
+
+    // 以分为单位；结算币种当前固定 USD
+    const amountCents = Math.round(net * 100);
+
+    try {
+      const transfer = await this.stripeConnect.createTransfer({
+        accountId: accountRows[0].externalAccountId,
+        amountCents,
+        currency: settlement.currency || 'USD',
+        settlementNo: settlement.settlementNo,
+      });
+
+      const updated = await this.db
+        .update(settlements)
+        .set({
+          status: 'paid',
+          paidAt: new Date(),
+          payoutId: transfer.id,
+          payoutProvider: 'stripe',
+          payoutError: null,
+          updatedAt: new Date(),
+        })
+        // 条件更新：并发点击时只有一次能把 pending 改成 paid
+        .where(and(eq(settlements.id, id), eq(settlements.status, 'pending')))
+        .returning();
+
+      if (updated.length === 0) {
+        // 已经被另一个请求打款了——记录警告，避免重复转账
+        this.logger.warn(`结算单 ${settlement.settlementNo} 已被并发打款，跳过`);
+        throw new BadRequestException('该结算单已被处理');
+      }
+
+      this.logger.log(`结算单 ${settlement.settlementNo} 已打款：${transfer.id}（${net} ${settlement.currency}）`);
+      return this.toView(updated[0]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!(error instanceof BadRequestException)) {
+        await this.db
+          .update(settlements)
+          .set({ payoutError: message, payoutProvider: 'stripe', updatedAt: new Date() })
+          .where(eq(settlements.id, id));
+        this.logger.error(`结算单 ${settlement.settlementNo} 打款失败：${message}`);
+      }
+      throw error instanceof BadRequestException ? error : new BadRequestException(`打款失败：${message}`);
+    }
+  }
+
   private async generateNo(): Promise<string> {
     const now = new Date();
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -404,6 +600,9 @@ export class SettlementService {
       lineItems: (row.lineItems ?? []) as unknown as SettlementLine[],
       note: row.note ?? undefined,
       paidAt: row.paidAt?.toISOString(),
+      payoutId: row.payoutId ?? undefined,
+      payoutProvider: row.payoutProvider ?? undefined,
+      payoutError: row.payoutError ?? undefined,
       createdAt: row.createdAt.toISOString(),
     };
   }

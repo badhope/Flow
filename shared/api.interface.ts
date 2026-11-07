@@ -1393,3 +1393,63 @@ export interface CommissionRule {
   fixedFeeCurrency: string;
   note?: string;
 }
+
+// ==================== 多仓 / 报关行 / 打款 ====================
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  country: string;
+  address?: string;
+  contactName?: string;
+  contactPhone?: string;
+  priority: number;
+  isDefault: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface WarehouseStockRow {
+  warehouseId: string;
+  warehouseName: string;
+  warehouseCode: string;
+  country: string;
+  priority: number;
+  stock: number;
+  safetyStock: number;
+  available: number;
+}
+
+export interface StockTransfer {
+  id: string;
+  transferNo: string;
+  variantId: string;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  quantity: number;
+  status: 'pending' | 'shipped' | 'completed' | 'cancelled' | string;
+  note?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface CustomsBrokerConfig {
+  provider: string;
+  endpoint: string;
+  enabled: boolean;
+  hasCredentials: boolean;
+  hasSigningSecret: boolean;
+  updatedAt: string;
+}
+
+export interface PayoutAccount {
+  configured: boolean;
+  stripeConfigured: boolean;
+  accountId?: string;
+  status?: string;
+  payoutsEnabled?: boolean;
+  detailsSubmitted?: boolean;
+  currency?: string;
+  country?: string;
+}

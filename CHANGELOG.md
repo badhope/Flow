@@ -5,6 +5,49 @@
 
 ---
 
+## [1.28.0] — 2026-11-07
+
+**主题：把上一版列出的四条"已知边界"全部做掉。** 它们不是可选项——不补，
+多仓/清关/结算就只是半成品。
+
+### Added
+
+- **多仓** `WarehouseService`
+  - 仓库 CRUD、分仓库存、安全库存、仓间调拨（发货仓冻结→入库）。
+  - 选仓规则写死：目的国本地仓优先 → 优先级 → 可用量降序；一次发不完才拆单。
+  - 聚合库存（`product_variants.stock` / `products.total_stock`）随分仓实时重算，
+    避免"分仓有货但商品显示售罄"。
+- **报关行对接** `broker-adapter.ts`
+  - 通用 HTTP 适配器：JSON 报文、HMAC-SHA256 签名、Bearer 兜底。
+  - 仅对网络错误与 5xx 重试（4xx 是报文问题，重试只会被判定为攻击）。
+  - 回执写回单据（`broker_ref`/`broker_status`），失败记录 `last_error` 与尝试次数。
+  - 配置保存强制 https，凭据与签名密钥只写不读。
+- **Stripe Connect 真实打款** `StripeConnectService`
+  - Express 账户创建、onboarding 链接、账户状态刷新。
+  - `/v1/transfers` 转账，用结算单号做 `Idempotency-Key`；本地用条件更新抢占。
+- **高频汇率**：定时刷新（`FX_REFRESH_MINUTES`，默认 15 分钟）+ 双源回退
+  （open.er-api → frankfurter），全部失败才保留旧值。
+- 前端：仓库管理页、结算页收款账户状态、商品表单清关字段分组。
+
+### Fixed
+
+- **路由顺序 bug**：`@Get(':id')` 声明在 `@Get('payout-account')` 之前，
+  把 "payout-account" 当成 id 查库直接 500。静态路由已前移。
+- **新建商品无法下单**：只写聚合库存、没有分仓记录，下单报 409（E2E 抓到）。
+  现在创建商品时自动镜像到默认仓。
+- **历史/种子商品无法下单**：升级后老数据没有分仓记录。
+  在读取路径自愈（补齐默认仓库存），不依赖一次性迁移。
+- **取消订单重复回补**：`releaseOrderResources` 手动加聚合库存，与 `restore()`
+  内部重算叠加，每次取消凭空多出库存。已移除手动部分。
+- **`order_items.warehouse_id` 恒为 null**：赋值发生在 insert 之后。已前移。
+- **默认仓缺失**：迁移里的 INSERT 在空库上匹配不到任何卖家（卖家由种子数据后创建）。
+  改为启动钩子 + 创建商品时兜底。
+
+### Changed
+
+- 测试 394 → 417。
+- 迁移 `0012_multi_warehouse_broker_payout.sql`（4 张新表 + 加列，含历史数据迁移）。
+
 ## [1.27.0] — 2026-11-05
 
 **主题：把跨境交易链路补完整。** 上一版修了"税算错、库存不释放"，这一版补上

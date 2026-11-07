@@ -18,7 +18,20 @@ import { currencies } from '../../database/schema';
  *      对账时会被当成误差。
  */
 
-const FX_ENDPOINT = 'https://open.er-api.com/v6/latest/USD';
+/**
+ * 汇率源，按顺序尝试。
+ *
+ * 为什么要多源：单一免费源会定期维护，失败时如果只回退到"保留旧值"，
+ * 长时间停机就会用过期汇率报价。两个独立源交叉覆盖能把这种窗口压到最小。
+ * 任一源成功即停止，全部失败才保留旧值。
+ */
+const FX_SOURCES = [
+  { name: 'open.er-api', url: 'https://open.er-api.com/v6/latest/USD' },
+  { name: 'frankfurter', url: 'https://api.frankfurter.dev/v1/latest?base=USD' },
+] as const;
+
+/** 默认刷新间隔：15 分钟（可通过 FX_REFRESH_MINUTES 调整） */
+const DEFAULT_REFRESH_MINUTES = 15;
 /** 支持展示/交易的币种；不在表内的币种一律拒绝，避免脏数据 */
 const SUPPORTED = ['USD', 'EUR', 'GBP', 'CNY', 'JPY', 'CAD', 'AUD', 'SGD', 'KRW', 'HKD'] as const;
 
@@ -52,9 +65,23 @@ export class FxService implements OnApplicationBootstrap {
 
   constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
 
+  private timer: NodeJS.Timeout | null = null;
+
   onApplicationBootstrap(): void {
     // 启动 20 秒后尝试刷新一次；失败不阻塞启动（离线环境也能跑，用库内汇率）
     setTimeout(() => void this.refreshRates().catch(() => undefined), 20_000);
+
+    // 定时刷新：汇率的时效性直接决定报价准确性，只靠启动时拉一次会越用越旧
+    const minutes = Number(process.env.FX_REFRESH_MINUTES ?? DEFAULT_REFRESH_MINUTES);
+    const interval = (Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_REFRESH_MINUTES) * 60_000;
+    this.timer = setInterval(() => void this.refreshRates().catch(() => undefined), interval);
+    this.timer.unref?.();
+    this.logger.log(`汇率定时刷新已启用：每 ${interval / 60000} 分钟`);
+  }
+
+  onApplicationShutdown(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
   }
 
   /** 全部启用的币种（含实时汇率） */
@@ -129,33 +156,51 @@ export class FxService implements OnApplicationBootstrap {
    * 一张 100 EUR 的订单被当成 100 USD，误差比不更新汇率还大。
    */
   async refreshRates(): Promise<{ updated: number; failed: number; source: string }> {
-    let payload: { result?: string; rates?: Record<string, number>; time_last_update_unix?: number };
-    try {
-      const res = await fetch(FX_ENDPOINT, {
-        signal: AbortSignal.timeout(10_000),
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      payload = await res.json() as typeof payload;
-      if (payload?.result !== 'success' || !payload.rates) {
-        throw new Error('汇率源返回格式异常');
+    let payload: { rates?: Record<string, number>; updatedAt?: Date; source?: string } | null = null;
+    const errors: string[] = [];
+
+    for (const src of FX_SOURCES) {
+      try {
+        const res = await fetch(src.url, {
+          signal: AbortSignal.timeout(10_000),
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json() as Record<string, unknown>;
+
+        // 两个源的字段名不同：open.er-api 用 rates + time_last_update_unix，
+        // frankfurter 用 rates + date。统一成内部形态。
+        const rates = (json.rates ?? {}) as Record<string, number>;
+        if (!rates || typeof rates !== 'object' || Object.keys(rates).length === 0) {
+          throw new Error('响应缺少 rates');
+        }
+        // frankfurter 不含 USD 自身，补上
+        if (rates.USD === undefined) rates.USD = 1;
+
+        const unix = Number(json.time_last_update_unix);
+        const updatedAt = Number.isFinite(unix) && unix > 0
+          ? new Date(unix * 1000)
+          : (typeof json.date === 'string' ? new Date(`${json.date}T00:00:00Z`) : new Date());
+
+        payload = { rates, updatedAt, source: src.name };
+        break;
+      } catch (error) {
+        errors.push(`${src.name}: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      this.logger.warn(
-        `汇率刷新失败，保留库中既有汇率：${error instanceof Error ? error.message : String(error)}`,
-      );
+    }
+
+    if (!payload) {
+      this.logger.warn(`所有汇率源均失败，保留库中既有汇率：${errors.join('; ')}`);
       this.cacheLoadedAt = 0; // 下次访问重新读库
       return { updated: 0, failed: SUPPORTED.length, source: 'manual' };
     }
 
-    const updatedAt = payload.time_last_update_unix
-      ? new Date(payload.time_last_update_unix * 1000)
-      : new Date();
+    const updatedAt = payload.updatedAt ?? new Date();
 
     let updated = 0;
     let failed = 0;
     for (const code of SUPPORTED) {
-      const rate = payload.rates[code];
+      const rate = payload.rates?.[code];
       // USD 自身恒为 1；其余币种必须有正数汇率，否则视为该币种失败
       if (code !== 'USD' && (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0)) {
         failed += 1;

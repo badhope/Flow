@@ -4,8 +4,11 @@ import { Decimal } from 'decimal.js';
 
 import { DRIZZLE_DATABASE, type Database } from '../../database/database.provider';
 import {
-  customsDeclarations, orderItems, orders, products,
+  customsBrokerConfigs, customsDeclarations, orderItems, orders, products,
 } from '../../database/schema';
+import {
+  BrokerError, getBrokerAdapter, type BrokerSubmitPayload,
+} from './broker-adapter';
 
 /**
  * 清关单据。
@@ -50,6 +53,12 @@ export interface CustomsDeclarationView {
   note?: string;
   generatedAt: string;
   filedAt?: string;
+  /** 报关行回执 */
+  brokerRef?: string;
+  brokerStatus?: string;
+  submittedAt?: string;
+  lastError?: string;
+  attemptCount: number;
   /** 整单层面的告警（如全部商品缺 HS 码） */
   warnings: string[];
 }
@@ -257,6 +266,162 @@ export class CustomsService {
     }
   }
 
+  // ---------------- 报关行对接 ----------------
+
+  /** 读取卖家的报关行配置（未配置返回 null，调用方需显式处理） */
+  async getBrokerConfig(sellerId: string): Promise<typeof customsBrokerConfigs.$inferSelect | null> {
+    const rows = await this.db
+      .select()
+      .from(customsBrokerConfigs)
+      .where(eq(customsBrokerConfigs.sellerId, sellerId))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  /** 保存报关行配置（凭据只写不读，接口返回时脱敏） */
+  async saveBrokerConfig(sellerId: string, input: {
+    provider?: string; endpoint: string; credentials?: Record<string, string>;
+    signingSecret?: string; enabled?: boolean;
+  }) {
+    if (!input?.endpoint?.trim()) throw new BadRequestException('报关行端点必填');
+    const endpoint = input.endpoint.trim();
+    // 只允许 https：报关数据含买家地址与货物明细，明文传输不可接受
+    if (!/^https:\/\//i.test(endpoint)) {
+      throw new BadRequestException('报关行端点必须使用 https');
+    }
+
+    const values = {
+      sellerId,
+      provider: input.provider ?? 'generic_http',
+      endpoint,
+      credentials: input.credentials ?? {},
+      signingSecret: input.signingSecret ?? null,
+      enabled: input.enabled ?? false,
+      updatedAt: new Date(),
+    };
+
+    const existing = await this.getBrokerConfig(sellerId);
+    if (existing) {
+      const updated = await this.db
+        .update(customsBrokerConfigs)
+        .set(values)
+        .where(eq(customsBrokerConfigs.id, existing.id))
+        .returning();
+      return this.maskBrokerConfig(updated[0]);
+    }
+    const inserted = await this.db
+      .insert(customsBrokerConfigs)
+      .values(values)
+      .returning();
+    return this.maskBrokerConfig(inserted[0]);
+  }
+
+  /**
+   * 向报关行真实提交申报。
+   *
+   * 与 `markFiled` 的区别：`markFiled` 是卖家**手工**推进状态（线下已申报），
+   * 这里是**系统对接**，报文、签名、重试都由适配器完成，回执写回单据。
+   *
+   * 失败时把错误写进 `lastError` 并递增 attemptCount，下次可重试；
+   * 不把失败当成成功，也不静默吞掉。
+   */
+  async submitToBroker(id: string, actor: { userId?: string; role?: string }): Promise<CustomsDeclarationView> {
+    const rows = await this.db.select().from(customsDeclarations).where(eq(customsDeclarations.id, id));
+    if (rows.length === 0) throw new NotFoundException('单据不存在');
+    const declaration = rows[0];
+    if (actor.role === 'seller' && declaration.sellerId !== actor.userId) {
+      throw new NotFoundException('单据不存在');
+    }
+    if (declaration.status === 'filed' || declaration.status === 'cleared') {
+      throw new BadRequestException('该单据已申报，无需重复提交');
+    }
+    if (!declaration.sellerId) {
+      throw new BadRequestException('单据缺少卖家归属，无法确定报关行配置');
+    }
+
+    const config = await this.getBrokerConfig(declaration.sellerId);
+    if (!config || !config.enabled) {
+      throw new BadRequestException('未启用报关行对接，请先在设置中配置并启用');
+    }
+
+    const items = (declaration.lineItems ?? []) as unknown as BrokerSubmitPayload['lineItems'];
+    const missing = items.filter((i) => !i.hsCode);
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `还有 ${missing.length} 项缺少 HS 编码，无法申报：${missing.map((m) => m.sku).join(', ')}`,
+      );
+    }
+
+    const payload: BrokerSubmitPayload = {
+      declarationNo: declaration.declarationNo,
+      destinationCountry: declaration.destinationCountry,
+      originCountry: declaration.originCountry,
+      declaredValue: declaration.declaredValue as string,
+      declaredCurrency: declaration.declaredCurrency,
+      declaredValueUsd: declaration.declaredValueUsd as string,
+      lineItems: items,
+      sellerRef: declaration.sellerId,
+    };
+
+    const adapter = getBrokerAdapter(config.provider);
+    const attempt = declaration.attemptCount + 1;
+
+    try {
+      const result = await adapter.submit(
+        {
+          endpoint: config.endpoint,
+          credentials: (config.credentials ?? {}) as Record<string, string>,
+          signingSecret: config.signingSecret ?? undefined,
+        },
+        payload,
+      );
+
+      // 回执写回：accepted → filed；rejected → 保持 draft 并记录原因
+      const accepted = result.status === 'accepted';
+      const updated = await this.db
+        .update(customsDeclarations)
+        .set({
+          brokerRef: result.reference,
+          brokerStatus: result.status,
+          submittedAt: new Date(),
+          attemptCount: attempt,
+          lastError: accepted ? null : (result.message ?? `报关行拒绝：${result.status}`),
+          status: accepted ? 'filed' : declaration.status,
+          filedAt: accepted ? new Date() : declaration.filedAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(customsDeclarations.id, id))
+        .returning();
+
+      this.logger.log(
+        `报关提交 ${declaration.declarationNo}：${result.status}（回执 ${result.reference}）`,
+      );
+      return this.toView(updated[0]);
+    } catch (error) {
+      const message = error instanceof BrokerError
+        ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+        : error instanceof Error ? error.message : String(error);
+      await this.db
+        .update(customsDeclarations)
+        .set({ attemptCount: attempt, lastError: message, submittedAt: new Date(), updatedAt: new Date() })
+        .where(eq(customsDeclarations.id, id));
+      this.logger.error(`报关提交失败 ${declaration.declarationNo}：${message}`);
+      throw new BadRequestException(`报关行提交失败：${message}`);
+    }
+  }
+
+  private maskBrokerConfig(row: typeof customsBrokerConfigs.$inferSelect) {
+    // 凭据与签名密钥绝不能出现在响应里，只回是否已配置
+    return {
+      provider: row.provider,
+      endpoint: row.endpoint,
+      enabled: row.enabled,
+      hasCredentials: Object.keys((row.credentials ?? {}) as Record<string, unknown>).length > 0,
+      hasSigningSecret: !!row.signingSecret,
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   private toView(row: typeof customsDeclarations.$inferSelect): CustomsDeclarationView {
     const items = (row.lineItems ?? []) as unknown as CustomsLineItem[];
     const warnings: string[] = [];
@@ -279,6 +444,11 @@ export class CustomsService {
       note: row.note ?? undefined,
       generatedAt: row.generatedAt.toISOString(),
       filedAt: row.filedAt?.toISOString(),
+      brokerRef: row.brokerRef ?? undefined,
+      brokerStatus: row.brokerStatus ?? undefined,
+      submittedAt: row.submittedAt?.toISOString(),
+      lastError: row.lastError ?? undefined,
+      attemptCount: row.attemptCount,
       warnings,
     };
   }

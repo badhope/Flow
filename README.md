@@ -6,12 +6,12 @@
 
 **跨境电商平台。买家商城 + 卖家 AI 工作台，一套代码。**
 
-[![Version](https://img.shields.io/badge/version-v1.27.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.28.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Tests](https://img.shields.io/badge/tests-394%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-417%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -80,6 +80,9 @@ Four pieces that only make sense together:
 | **Customs** | Product-level HS code, origin country, customs name. One declaration per order, line items frozen as snapshots. Declared value is the **price actually paid**, not list price. |
 | **Stock reservations** | `soft → consumed` on payment, or `released` on cancel/timeout. Answers "how much stock is held by unpaid orders" — a number the old model could not produce. |
 | **Seller settlement** | Commission rules, period settlement, per-order breakdown. The rate is snapshotted into each settlement so changing it never rewrites history. |
+| **Multi-warehouse** | Per-warehouse stock and transfers. Routing prefers the destination-country warehouse, then priority, then available quantity. Aggregate stock is recomputed in the same transaction so "in stock per warehouse but sold out on the listing" can't happen. |
+| **Customs broker** | A generic HTTP adapter with HMAC request signing and retry-on-5xx only. Receipts are written back onto the declaration; rejections stay `draft` with the reason recorded. |
+| **Real payouts** | Stripe Connect transfers, keyed by settlement number as the idempotency key. Two layers (Stripe + a conditional local update) make double-payout impossible. |
 
 Details in [docs/CROSS-BORDER.md](docs/CROSS-BORDER.md).
 
@@ -124,8 +127,8 @@ Details in [docs/CROSS-BORDER.md](docs/CROSS-BORDER.md).
 | 项 | 状态 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` |
-| 规模 | 30 NestJS 模块 · 175 端点 · 44 表 · 12 迁移 |
-| 测试 | **394 用例 / 56 文件** |
+| 规模 | 30 NestJS 模块 · 193 端点 · 49 表 · 13 迁移 |
+| 测试 | **417 用例 / 58 文件** |
 | E2E | 6 套跑真实 PostgreSQL：工作流、无 Key 降级、交易、渠道、副驾、导购 |
 | 浏览器 QA | 30 条路由，桌面 + 移动，0 console 错误 / 0 失败请求 |
 | CI | lint → typecheck → 单测 → 生产依赖审计 → 构建 → Postgres E2E |

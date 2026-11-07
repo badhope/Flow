@@ -18,6 +18,7 @@ import {
   Bot,
   Command,
   Wallet,
+  Warehouse,
 } from 'lucide-react';
 import logoWhite from '@/assets/branding/logo-white.png';
 import { Button } from '@/components/ui/button';
@@ -99,6 +100,11 @@ const SellerLayout: React.FC = () => {
       to: '/seller/customs',
       label: zh ? '清关单据' : 'Customs',
       icon: FileText,
+    },
+    {
+      to: '/seller/warehouses',
+      label: zh ? '仓库管理' : 'Warehouses',
+      icon: Warehouse,
     },
     {
       to: '/seller/coupons',
