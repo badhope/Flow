@@ -110,3 +110,7 @@ docs/qa/journey-report.json
 
 # Local QA audit artifacts (screenshots + report regenerate on demand)
 docs/qa/audit/
+
+# 演示 GIF 由 npm run capture:all 按需生成，不入库：
+# 2.6MB 的二进制对 clone 无价值，README 直接链 mp4 更清晰。
+/docs/video/demo.gif

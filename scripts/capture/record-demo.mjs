@@ -6,7 +6,10 @@
  * 前置：应用已运行（VIDEO_BASE，默认 http://127.0.0.1:3300）且已播种演示数据（scripts/capture/seed-demo.mjs）。
  * 需要：本机 Chrome + ffmpeg（PATH 或 FFMPEG_PATH）。
  *
- * 产出：docs/video/demo.mp4（H.264 1280×720）+ docs/video/demo.gif（关键片段，README 内联）
+ * 产出：docs/video/demo.mp4（H.264 1280×720）+ docs/video/demo.gif（关键片段）
+ *
+ * GIF 仅供本地预览（README 链的是 mp4）：它体积大（~1.3MB）且内容与 mp4 重复，
+ * 不适合入版本库，已在 .gitignore 中排除。
  */
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { existsSync, createWriteStream } from 'node:fs';
@@ -269,7 +272,9 @@ async function main() {
   console.log('[video] 生成 gif ...');
   await run([
     '-y', '-ss', '4', '-t', '9', '-i', mp4,
-    '-vf', 'fps=11,scale=880:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer',
+    // 720p / 8fps / 96 色：README 内联预览足够，且体积约为原来一半（2.6MB → 1.3MB），
+    // 对大文件托管与加载速度都更友好。
+    '-vf', 'fps=8,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer',
     gif,
   ]);
   console.log('[video] ✓', path.relative(process.cwd(), gif));
