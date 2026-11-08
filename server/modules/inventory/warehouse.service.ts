@@ -6,6 +6,7 @@ import { DRIZZLE_DATABASE, type Database } from '../../database/database.provide
 import {
   productVariants, products, stockMovements, stockTransfers, warehouseStock, warehouses,
 } from '../../database/schema';
+import { BatchService } from './batch.service';
 
 /**
  * 多仓库存。
@@ -42,7 +43,10 @@ export interface AllocationPlan {
 export class WarehouseService implements OnApplicationBootstrap {
   private readonly logger = new Logger(WarehouseService.name);
 
-  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE_DATABASE) private readonly db: Database,
+    private readonly batchService: BatchService,
+  ) {}
 
   /**
    * 启动时补齐默认仓。
@@ -521,8 +525,11 @@ export class WarehouseService implements OnApplicationBootstrap {
   async deduct(
     tx: Database,
     allocations: Array<{ warehouseId: string; variantId: string; quantity: number }>,
-  ): Promise<void> {
+  ): Promise<Map<string, Array<{ batchId: string; batchNo: string; quantity: number; expiresAt: string | null }>>> {
     const touched = new Set<string>();
+    // 按变体汇总本单实际消耗的批次，供 order_items 落快照
+    const consumption = new Map<string, Array<{ batchId: string; batchNo: string; quantity: number; expiresAt: string | null }>>();
+
     for (const a of allocations) {
       const updated = await tx
         .update(warehouseStock)
@@ -537,6 +544,23 @@ export class WarehouseService implements OnApplicationBootstrap {
       if (updated.length === 0) {
         throw new ConflictException('库存不足，下单失败');
       }
+
+      // 自愈：该 (仓, SKU) 若完全没有批次记录（历史数据/直写分仓的路径），
+      // 先按现有库存补一个 LEGACY 批次，否则 FEFO 扣不出货、下单直接失败。
+      await this.batchService.ensureBatchesFor(tx, {
+        warehouseId: a.warehouseId,
+        variantId: a.variantId,
+      });
+
+      // 分仓扣减成功后立刻扣批次（FEFO）。两者同事务：不一致就整体回滚。
+      const consumed = await this.batchService.consumeFefo(tx, {
+        warehouseId: a.warehouseId,
+        variantId: a.variantId,
+        quantity: a.quantity,
+      });
+      const prev = consumption.get(a.variantId) ?? [];
+      consumption.set(a.variantId, [...prev, ...consumed]);
+
       touched.add(a.variantId);
     }
 
@@ -545,6 +569,8 @@ export class WarehouseService implements OnApplicationBootstrap {
     for (const variantId of touched) {
       await this.syncVariantTotals(tx, variantId);
     }
+
+    return consumption;
   }
 
   /** 回补分仓库存（取消/退款时调用） */

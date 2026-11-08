@@ -86,6 +86,16 @@ try {
   await sql`DELETE FROM collection_products WHERE collection_id IN (SELECT id FROM collections WHERE slug LIKE ${'demo-%'})`;
   await sql`DELETE FROM collections WHERE slug LIKE ${'demo-%'}`;
   await sql`DELETE FROM cms_pages WHERE slug IN ('about','faq','privacy','terms','shipping-info','returns','payment-methods','how-to-order','help','contact','demo-faq')`;
+  // 批次与分仓库存必须先删：它们外键指向 product_variants，直接删商品会被约束拦住。
+  await sql`DELETE FROM stock_batches WHERE variant_id IN (
+    SELECT id FROM product_variants WHERE sku LIKE ${'DEMO-%'}
+  )`;
+  await sql`DELETE FROM stock_reservations WHERE variant_id IN (
+    SELECT id FROM product_variants WHERE sku LIKE ${'DEMO-%'}
+  )`;
+  await sql`DELETE FROM warehouse_stock WHERE variant_id IN (
+    SELECT id FROM product_variants WHERE sku LIKE ${'DEMO-%'}
+  )`;
   await sql`DELETE FROM products WHERE id IN (
     SELECT DISTINCT product_id FROM product_variants WHERE sku LIKE ${'DEMO-%'}
   )`;
@@ -108,6 +118,16 @@ try {
     catIds[c.slug] = row.id;
   }
 
+  // ---------- 默认仓 ----------
+  // 分仓库存是下单时的真相来源，批次是 FEFO 扣减的依据。
+  // 三者（聚合 / 分仓 / 批次）必须同时写入，否则演示环境一下单就 409。
+  await sql`DELETE FROM warehouses WHERE seller_id = ${sellerId} AND code = 'DEFAULT'`;
+  const [demoWarehouse] = await sql`
+    INSERT INTO warehouses (seller_id, name, code, country, is_default, priority)
+    VALUES (${sellerId}, '默认仓', 'DEFAULT', 'CN', true, 100)
+    RETURNING id`;
+  console.log('[seed-demo] 默认仓已创建');
+
   // ---------- 商品 ----------
   const productIds = {};
   for (const p of PRODUCTS) {
@@ -125,9 +145,20 @@ try {
         ${p.bullets}, ${p.bullets},
         ${p.titleZh}, ${p.titleEn}, 'active', ${p.weight}, ${p.stock}, ${p.sold}, ${sellerId}, 4.8, 128
       ) RETURNING id`;
-    await sql`
+    const [variant] = await sql`
       INSERT INTO product_variants (product_id, sku, option_values, price, original_price, stock, sold, variant_image, status)
-      VALUES (${prod.id}, ${'DEMO-' + p.key.toUpperCase()}, ${sql.array([])}, ${p.price}, ${p.px}, ${p.stock}, ${p.sold}, ${imgs[0]}, 'active')`;
+      VALUES (${prod.id}, ${'DEMO-' + p.key.toUpperCase()}, ${sql.array([])}, ${p.price}, ${p.px}, ${p.stock}, ${p.sold}, ${imgs[0]}, 'active')
+      RETURNING id`;
+
+    // 分仓库存 + 批次：与聚合库存同时写入，保证 FEFO 能扣出货
+    await sql`
+      INSERT INTO warehouse_stock (warehouse_id, variant_id, stock, safety_stock)
+      VALUES (${demoWarehouse.id}, ${variant.id}, ${p.stock}, 0)`;
+    await sql`
+      INSERT INTO stock_batches (seller_id, variant_id, warehouse_id, batch_no, quantity, source, note)
+      VALUES (${sellerId}, ${variant.id}, ${demoWarehouse.id}, 'DEMO-DEFAULT', ${p.stock}, 'supplier',
+        '演示数据默认批次（无保质期）')`;
+
     productIds[p.key] = prod.id;
   }
   console.log('[seed-demo] 商品 ×', PRODUCTS.length, '已写入（含图片与变体）');

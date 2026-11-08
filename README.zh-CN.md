@@ -6,12 +6,12 @@
 
 **跨境电商平台。买家商城 + 卖家 AI 工作台，一套代码。**
 
-[![Version](https://img.shields.io/badge/version-v1.29.0-00C2B8?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.30.0-00C2B8?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B1F3A?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![NestJS](https://img.shields.io/badge/NestJS-12-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Tests](https://img.shields.io/badge/tests-427%20passing-10b981?style=flat-square)](server)
+[![Tests](https://img.shields.io/badge/tests-439%20passing-10b981?style=flat-square)](server)
 
 [**English**](README.md) · [**简体中文**](README.zh-CN.md)
 
@@ -127,8 +127,8 @@ npm run dev                       # Vite + NestJS
 | 项 | 状态 |
 |---|---|
 | 类型 | TypeScript strict，前后端共享 `shared/api.interface.ts` |
-| 规模 | 30 NestJS 模块 · 195 端点 · 49 表 · 13 迁移 |
-| 测试 | **427 用例 / 59 文件** |
+| 规模 | 30 NestJS 模块 · 203 端点 · 50 表 · 14 迁移 |
+| 测试 | **439 用例 / 60 文件** |
 | E2E | 6 套跑真实 PostgreSQL：工作流、无 Key 降级、交易、渠道、副驾、导购 |
 | 浏览器 QA | 30 条路由，桌面 + 移动，0 console 错误 / 0 失败请求 |
 | CI | lint → typecheck → 单测 → 生产依赖审计 → 构建 → Postgres E2E |

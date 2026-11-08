@@ -318,6 +318,8 @@ export const orderItems = pgTable('order_items', {
   productSku: varchar('product_sku', { length: 100 }),
   /** 发货仓 */
   warehouseId: uuid('warehouse_id'),
+  /** 实际消耗的批次快照 [{ batchId, batchNo, quantity, expiresAt }]，用于追溯与召回 */
+  batchAllocations: jsonb('batch_allocations').notNull().default(sql`'[]'::jsonb`),
   productImage: text('product_image'),
   unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
   quantity: integer('quantity').notNull(),
@@ -911,6 +913,42 @@ export const warehouseStock = pgTable('warehouse_stock', {
 }, (t) => ({
   warehouseVariantUnique: uniqueIndex('warehouse_stock_unique').on(t.warehouseId, t.variantId),
   variantIdx: index('warehouse_stock_variant_idx').on(t.variantId),
+}));
+
+/**
+ * 批次库存。
+ *
+ * 与 `warehouseStock` 的关系：批次是它的**子维度**。
+ * `warehouse_stock.stock` 仍是该仓该 SKU 的总量（既有查询不变），
+ * 批次明细按 (warehouse, variant, batch) 记录，服务层保证
+ * `SUM(批次.quantity) === warehouse_stock.stock`。
+ *
+ * 为什么这样设计而不是把 stock 拆掉：全站大量查询依赖聚合字段，
+ * 拆表要改所有读取路径，风险远大于收益。
+ *
+ * 效期语义：
+ *   - `expiresAt` 为空 = 无保质期（标品）
+ *   - 已过期的批次**不计入可售**，但保留在库以便追溯与报废流程
+ */
+export const stockBatches = pgTable('stock_batches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sellerId: uuid('seller_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  variantId: uuid('variant_id').notNull().references(() => productVariants.id, { onDelete: 'cascade' }),
+  warehouseId: uuid('warehouse_id').notNull().references(() => warehouses.id, { onDelete: 'cascade' }),
+  /** 供应商/内部批次号，同一 SKU 可有多批 */
+  batchNo: varchar('batch_no', { length: 64 }).notNull(),
+  quantity: integer('quantity').notNull().default(0),
+  producedAt: timestamp('produced_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  /** supplier=采购入库 / transfer=调拨 / return=退货入库 */
+  source: varchar('source', { length: 20 }).notNull().default('supplier'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  unique: uniqueIndex('stock_batches_unique').on(t.warehouseId, t.variantId, t.batchNo),
+  expiryIdx: index('stock_batches_expiry_idx').on(t.expiresAt),
+  variantIdx: index('stock_batches_variant_idx').on(t.variantId, t.warehouseId),
 }));
 
 /** 仓间调拨 */

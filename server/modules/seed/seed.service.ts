@@ -10,6 +10,7 @@ import {
   products,
   shippingTemplates,
   users,
+  stockBatches,
   warehouseStock,
   warehouses,
 } from '../../database/schema';
@@ -164,6 +165,21 @@ export class SeedService implements OnApplicationBootstrap {
           await tx
             .insert(warehouseStock)
             .values({ warehouseId: demoWarehouseId, variantId: variant.id, stock: item.stock })
+            .onConflictDoNothing();
+
+          // 批次也必须建：下单走 FEFO 扣批次，没有批次就扣不出货。
+          // 演示商品给一个无保质期的默认批次（标品）。
+          await tx
+            .insert(stockBatches)
+            .values({
+              sellerId: seller.id,
+              warehouseId: demoWarehouseId,
+              variantId: variant.id,
+              batchNo: 'DEMO-DEFAULT',
+              quantity: item.stock,
+              source: 'supplier',
+              note: '演示数据默认批次（无保质期）',
+            })
             .onConflictDoNothing();
         }
       }

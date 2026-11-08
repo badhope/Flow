@@ -56,6 +56,7 @@ const ROUTES = [
   { name: 'seller-settlements', path: '/seller/settlements', role: 'seller' },
   { name: 'seller-customs', path: '/seller/customs', role: 'seller' },
   { name: 'seller-warehouses', path: '/seller/warehouses', role: 'seller' },
+  { name: 'seller-batches', path: '/seller/batches', role: 'seller' },
   { name: 'seller-inquiries', path: '/seller/inquiries', role: 'seller' },
   { name: 'seller-copilot', path: '/seller/copilot', role: 'seller' },
   { name: 'seller-ai-center', path: '/seller/ai-center', role: 'seller' },

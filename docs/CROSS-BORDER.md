@@ -233,6 +233,44 @@ POST /api/warehouses/stock-drift/repair    # 以分仓为准修复
 
 ---
 
+### 批次与效期（FEFO）
+
+批次是分仓库存的**子维度**：`warehouse_stock.stock` 仍是该仓该 SKU 的总量
+（既有查询不变），批次明细按 `(warehouse, variant, batch)` 记录。
+服务层保证 `SUM(批次.quantity) === warehouse_stock.stock`。
+
+**为什么是 FEFO 不是 FIFO**：按入库时间出库会把临期货压在仓里直到报废。
+按到期日排才是正确做法——代价是拣货路径更长，但报废成本更高。
+
+排序规则（写死在代码里）：
+
+1. 有到期日的优先于无到期日（标品最后出）
+2. 有到期日的按到期日升序
+3. 同时到期按入库时间
+
+**过期批次不计入可售**（`expiresAt <= now` 跳过），但仍保留在库以便追溯与报废流程。
+
+**订单行记录批次快照**（`order_items.batch_allocations`）。退款/取消时按快照
+原路退回——不能笼统塞进某个批次，否则追溯链断裂、效期也会算错。
+
+**自愈**：扣减前若发现某 `(仓, SKU)` 完全没有批次记录（历史数据、直写分仓的路径），
+先按当前库存补一个 `LEGACY` 批次。比起让买家看到"批次库存不足"，
+不如当场补齐。
+
+### 批次接口
+
+| 端点 | 说明 |
+|---|---|
+| `POST /api/batches` | 批次入库（同批次号累加） |
+| `GET /api/batches` | 全部批次（按到期日排序） |
+| `GET /api/batches/expiring?days=30` | 临期/过期看板 |
+| `GET /api/batches/variant/:id` | 某 SKU 的批次明细 |
+| `GET /api/batches/drift` | 批次与分仓库存的一致性检查 |
+| `POST /api/batches/drift/repair` | 以分仓为准修复 |
+| `POST /api/batches/backfill` | 为缺批次的分仓库存补 LEGACY 批次 |
+
+---
+
 ## 七、报关行对接
 
 ### 为什么需要适配器
@@ -304,4 +342,4 @@ Stripe 侧用结算单号做 `Idempotency-Key`；本地用条件更新（`status
 - **报关行只实现通用 HTTP 适配器**。对接具体服务商（如中国单一窗口）需要按对方
   协议另写适配器——表结构与状态回写已经就绪，换适配器不用改表。
 - **打款只支持 Stripe Connect**。PayPal Payouts / 银行转账需要另加 provider。
-- **多仓不覆盖"批次/效期"**。同一 SKU 的不同批次（生产日期、保质期）尚未分维度追踪。
+- **批次不覆盖"序列号"**。整机/高价值商品的单件序列号追踪尚未实现（批次是数量级）。

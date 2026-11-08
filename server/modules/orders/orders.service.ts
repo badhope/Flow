@@ -17,6 +17,7 @@ import { computeTax } from '../../common/pricing/tax';
 import { FxService } from '../fx/fx.service';
 import { StockReservationService } from '../inventory/stock-reservation.service';
 import { WarehouseService } from '../inventory/warehouse.service';
+import { BatchService } from '../inventory/batch.service';
 import { canAccessSellerResource, isPlatformAdmin, resolveSingleSellerId } from '../../common/tenant/tenant-scope';
 import { canTransitionOrderStatus } from './order-status';
 import type {
@@ -53,6 +54,7 @@ export class OrdersService {
     private readonly fxService: FxService,
     private readonly stockReservation: StockReservationService,
     private readonly warehouseService: WarehouseService,
+    private readonly batchService: BatchService,
   ) {}
 
   private generateOrderNo(): string {
@@ -720,6 +722,8 @@ export class OrdersService {
       subtotal: string;
       /** 发货仓（拆单时记录主仓） */
       warehouseId?: string | null;
+      /** 本行实际消耗的批次快照 */
+      batchAllocations?: Array<{ batchId: string; batchNo: string; quantity: number; expiresAt: string | null }>;
     }> = [];
 
     dto.items.forEach((item, index) => {
@@ -886,6 +890,30 @@ export class OrdersService {
         orderItemValues[index].warehouseId = plan?.allocations[0]?.warehouseId ?? null;
       });
 
+      // 下单即锁定库存；销量（sold）在支付成功入账时累计（见 PaymentsService.markOrderPaid）
+      //
+      // 分仓扣减：按 planAllocation 算出的方案逐仓扣，扣不动就整体回滚。
+      // 聚合字段（product_variants.stock / products.total_stock）随后按分仓总和重算，
+      // 避免"分仓有货但商品显示售罄"。
+      for (const [index, item] of dto.items.entries()) {
+        const entry = itemVariantIds.find((e) => e.index === index);
+        const variantId = entry!.variantId;
+        const plan = allocationPlans.get(variantId);
+
+        const consumed = await this.warehouseService.deduct(
+          tx as unknown as Database,
+          (plan?.allocations ?? []).map((a) => ({
+            warehouseId: a.warehouseId,
+            variantId,
+            quantity: a.quantity,
+          })),
+        );
+
+        // 批次快照落在订单行：召回/追溯时要知道具体发的是哪一批
+        orderItemValues[index].batchAllocations = consumed.get(variantId) ?? [];
+
+      }
+
       await tx.insert(orderItems).values(
         orderItemValues.map((item) => ({
           orderId: newOrder.id,
@@ -899,29 +927,9 @@ export class OrdersService {
           quantity: item.quantity,
           subtotal: item.subtotal,
           warehouseId: item.warehouseId ?? null,
+          batchAllocations: item.batchAllocations ?? [],
         })),
       );
-
-      // 下单即锁定库存；销量（sold）在支付成功入账时累计（见 PaymentsService.markOrderPaid）
-      //
-      // 分仓扣减：按 planAllocation 算出的方案逐仓扣，扣不动就整体回滚。
-      // 聚合字段（product_variants.stock / products.total_stock）随后按分仓总和重算，
-      // 避免"分仓有货但商品显示售罄"。
-      for (const [index, item] of dto.items.entries()) {
-        const entry = itemVariantIds.find((e) => e.index === index);
-        const variantId = entry!.variantId;
-        const plan = allocationPlans.get(variantId);
-
-        await this.warehouseService.deduct(
-          tx as unknown as typeof this.db,
-          (plan?.allocations ?? []).map((a) => ({
-            warehouseId: a.warehouseId,
-            variantId,
-            quantity: a.quantity,
-          })),
-        );
-
-      }
 
       if (couponId) {
         const couponUpdated = await tx
@@ -1053,6 +1061,7 @@ export class OrdersService {
           variantId: orderItems.variantId,
           quantity: orderItems.quantity,
           warehouseId: orderItems.warehouseId,
+          batchAllocations: orderItems.batchAllocations,
         })
         .from(orderItems)
         .where(eq(orderItems.orderId, orderId));
@@ -1064,9 +1073,18 @@ export class OrdersService {
         // restore() 内部会按分仓总和重算聚合字段（product_variants.stock / products.total_stock），
         // 这里**不能**再手动 +1 次，否则每次取消都会凭空多出库存。
         await this.warehouseService.restore(
-          tx as unknown as typeof this.db,
+          tx as unknown as Database,
           [{ warehouseId: item.warehouseId, variantId: item.variantId, quantity: item.quantity }],
         );
+        // 批次原路退回：追溯链不能断，效期也要回到正确的批次上
+        if (item.batchAllocations && Array.isArray(item.batchAllocations) && item.batchAllocations.length > 0) {
+          await this.batchService.restoreBatches(
+            tx as unknown as Database,
+            item.warehouseId ?? '',
+            item.variantId,
+            item.batchAllocations as Array<{ batchId: string; batchNo: string; quantity: number; expiresAt: string | null }>,
+          );
+        }
       }
 
       if (couponId) {

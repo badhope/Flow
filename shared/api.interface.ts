@@ -1463,3 +1463,29 @@ export interface PayoutAccount {
   currency?: string;
   country?: string;
 }
+
+// ==================== 批次 / 效期 ====================
+
+export interface StockBatch {
+  id: string;
+  batchNo: string;
+  warehouseId: string;
+  warehouseName: string;
+  variantId: string;
+  quantity: number;
+  producedAt?: string;
+  expiresAt?: string;
+  source: string;
+  note?: string;
+  /** 距到期天数；null=无保质期；负数=已过期 */
+  daysToExpiry: number | null;
+  status: 'ok' | 'expiring' | 'expired' | 'no_expiry';
+}
+
+/** 订单行消耗的批次快照 */
+export interface BatchAllocation {
+  batchId: string;
+  batchNo: string;
+  quantity: number;
+  expiresAt: string | null;
+}

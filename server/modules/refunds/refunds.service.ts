@@ -20,6 +20,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PaymentsService } from '../payments/payments.service';
 import { StockService } from '../inventory/stock.service';
+import { BatchService } from '../inventory/batch.service';
 import { resolveProviderRefundAmount } from '../payments/refund-amount';
 import { assertRefundWithinOrderCap } from './refund-cap';
 import {
@@ -42,6 +43,8 @@ interface RestoreItem {
   quantity: number;
   /** 实际发货仓：退款必须回补到这里，否则分仓与聚合会漂移 */
   warehouseId: string | null;
+  /** 原订单行消耗的批次，退款时原路退回 */
+  batchAllocations?: Array<{ batchId: string; batchNo: string; quantity: number; expiresAt: string | null }> | null;
 }
 
 @Injectable()
@@ -53,6 +56,7 @@ export class RefundsService {
     private readonly auditService: AuditService,
     private readonly paymentsService: PaymentsService,
     private readonly stockService: StockService,
+    private readonly batchService: BatchService,
   ) {}
 
   // ==================== Helpers ====================
@@ -416,23 +420,38 @@ export class RefundsService {
               variantId: orderItems.variantId,
               productId: orderItems.productId,
               warehouseId: orderItems.warehouseId,
+              batchAllocations: orderItems.batchAllocations,
             })
             .from(orderItems)
             .where(and(eq(orderItems.id, refundItem.orderItemId), eq(orderItems.orderId, order.id)));
           if (itemRows.length > 0) {
-            itemsToRestore.push({ ...itemRows[0], quantity: refundItem.quantity });
+            itemsToRestore.push({
+              variantId: itemRows[0].variantId,
+              productId: itemRows[0].productId,
+              warehouseId: itemRows[0].warehouseId,
+              quantity: refundItem.quantity,
+              batchAllocations: (itemRows[0].batchAllocations ?? null) as RestoreItem['batchAllocations'],
+            });
           }
         }
       } else if (isFullyRefunded) {
-        itemsToRestore = await tx
+        itemsToRestore = (await tx
           .select({
             variantId: orderItems.variantId,
             productId: orderItems.productId,
             quantity: orderItems.quantity,
             warehouseId: orderItems.warehouseId,
+            batchAllocations: orderItems.batchAllocations,
           })
           .from(orderItems)
-          .where(eq(orderItems.orderId, order.id));
+          .where(eq(orderItems.orderId, order.id)))
+          .map((r) => ({
+            variantId: r.variantId,
+            productId: r.productId,
+            quantity: r.quantity,
+            warehouseId: r.warehouseId,
+            batchAllocations: (r.batchAllocations ?? null) as RestoreItem['batchAllocations'],
+          }));
       }
 
       for (const item of itemsToRestore) {
@@ -450,6 +469,17 @@ export class RefundsService {
             .update(productVariants)
             .set({ sold: sql`GREATEST(${productVariants.sold} - ${item.quantity}, 0)`, updatedAt: now })
             .where(eq(productVariants.id, item.variantId));
+
+          // 批次原路退回：按原订单行实际消耗的批次与数量退，
+          // 不能笼统塞进某个批次，否则追溯链断裂、效期也会算错。
+          if (item.batchAllocations && item.batchAllocations.length > 0 && item.warehouseId) {
+            await this.batchService.restoreBatches(
+              tx as unknown as Database,
+              item.warehouseId,
+              item.variantId,
+              item.batchAllocations,
+            );
+          }
 
           await tx.insert(stockMovements).values({
             variantId: item.variantId,
