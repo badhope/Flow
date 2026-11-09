@@ -71,8 +71,11 @@ temp/
 *.orig
 
 # ===== 运行时数据 =====
-uploads/
-data/
+# 只忽略仓库根目录的运行时数据目录。
+# 之前写成 `data/`，把 `client/src/data/` 这类源码目录也一起忽略了——
+# 导致 countries.ts 从未入库，clone 下来构建会因缺少该模块而失败。
+/uploads/
+/data/
 *.sqlite
 *.sqlite-journal
 *.db
