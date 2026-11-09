@@ -26,7 +26,7 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/X33834/Flow.git && cd Flow
+git clone https://github.com/badhope/Flow.git && cd Flow
 cp .env.example .env          # 填 JWT_SECRET 和 POSTGRES_PASSWORD
 docker compose up -d --build
 ```
